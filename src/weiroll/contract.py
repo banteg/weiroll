@@ -90,12 +90,12 @@ class FunctionCall:
 class Contract:
     """Represents a contract that can be called through Weiroll."""
     
-    def __init__(self, address: str, abi: List[Dict[str, Any]], call_type: CallType = CallType.CALL):
+    def __init__(self, address: str, abi: Optional[List[Dict[str, Any]]], call_type: CallType = CallType.CALL):
         if not is_address(address):
             raise ValueError(f"Invalid address: {address}")
         
         self.address = to_checksum_address(address)
-        self.abi = abi
+        self.abi = abi or []  # Default to empty list if None
         self.functions: Dict[str, ContractFunction] = {}
         self.call_type = call_type
         
@@ -103,6 +103,9 @@ class Contract:
     
     def _process_abi(self):
         """Process the ABI to extract function signatures."""
+        if not self.abi:
+            return  # Skip processing if ABI is empty
+            
         for item in self.abi:
             if item.get('type') != 'function':
                 continue
@@ -123,18 +126,50 @@ class Contract:
     
     @staticmethod
     def createContract(contract_obj: Any, call_type: CallType = CallType.CALL) -> 'Contract':
-        """Create a Contract from an ethers.js or web3.py contract object.
+        """Create a Contract from a web3.py or ape contract object.
         By default, uses CALL call type for regular contracts.
-        """
-        if hasattr(contract_obj, 'address') and hasattr(contract_obj, 'abi'):
-            return Contract(contract_obj.address, contract_obj.abi, call_type)
         
-        raise ValueError("Unsupported contract object type")
+        Supports:
+        - web3.py contracts (contract_obj.address, contract_obj.abi)
+        - ape contracts (contract_obj.address, contract_obj.contract_type.abi)
+        """
+        if not hasattr(contract_obj, 'address'):
+            raise ValueError("Contract object must have an address attribute")
+            
+        # Handle web3.py contracts
+        if hasattr(contract_obj, 'abi'):
+            if contract_obj.abi is not None:
+                return Contract(contract_obj.address, contract_obj.abi, call_type)
+        # Missing abi property or it's None - attempt ape style
+        
+        # Handle ape contracts
+        if hasattr(contract_obj, 'contract_type'):
+            # Try to get ABI directly from the contract_type.abi property
+            if hasattr(contract_obj.contract_type, 'abi'):
+                if contract_obj.contract_type.abi is not None:
+                    return Contract(contract_obj.address, contract_obj.contract_type.abi, call_type)
+                
+            # Fallback to model_dump() pattern
+            if hasattr(contract_obj.contract_type, 'model_dump'):
+                try:
+                    # Get ABI from model_dump
+                    model_data = contract_obj.contract_type.model_dump()
+                    if isinstance(model_data, dict) and 'abi' in model_data and model_data['abi'] is not None:
+                        return Contract(contract_obj.address, model_data['abi'], call_type)
+                except Exception:
+                    # Error calling model_dump, continue to error
+                    pass
+        
+        raise ValueError("Unsupported contract object type. Must be a web3.py or ape contract.")
     
     @staticmethod
     def createLibrary(contract_obj: Any) -> 'Contract':
-        """Create a Contract from an ethers.js or web3.py contract object.
+        """Create a Contract from a web3.py or ape contract object.
         Uses DELEGATECALL call type for library contracts.
+        
+        Supports:
+        - web3.py contracts (contract_obj.address, contract_obj.abi)
+        - ape contracts (contract_obj.address, contract_obj.contract_type.model_dump()['abi'])
         """
         return Contract.createContract(contract_obj, CallType.DELEGATECALL)
 
