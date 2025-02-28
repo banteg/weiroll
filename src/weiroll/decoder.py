@@ -43,12 +43,12 @@ class DecodedCommand:
     selector: str
     target: str
     call_type: str
-    inputs: List[int]
-    output: Optional[int]
+    inputs: list[int]
+    output: int | None
     is_tuple_return: bool
     is_extended: bool
     raw_command: str
-    function: Optional[Dict[str, Any]] = None
+    function: dict[str, Any] | None = None
 
     def __str__(self) -> str:
         """Format the command for human-readable output."""
@@ -97,8 +97,8 @@ class DecodedPlan:
         new_planner = Decoder.to_planner(decoded)
         ```
     """
-    commands: List[DecodedCommand]
-    state: List[str]
+    commands: list[DecodedCommand]
+    state: list[str]
     
     def __str__(self) -> str:
         """Format the plan for human-readable output."""
@@ -164,7 +164,7 @@ class Decoder:
     """
     
     @staticmethod
-    def decode_command(command_data: Union[str, bytes]) -> DecodedCommand:
+    def decode_command(command_data: str | bytes) -> DecodedCommand:
         """
         Decode a command from bytes32 or hex string.
         
@@ -259,8 +259,8 @@ class Decoder:
     
     @staticmethod
     def decode_plan(
-        commands: List[Union[str, bytes]], 
-        state: List[str],
+        commands: list[str | bytes], 
+        state: list[str],
         lookup_function_info: bool = True
     ) -> DecodedPlan:
         """
@@ -363,7 +363,7 @@ class Decoder:
     
     @staticmethod
     @lru_cache(maxsize=128)
-    def _get_selector_for_function(name: str, input_types: List[str]) -> str:
+    def _get_selector_for_function(name: str, input_types: list[str]) -> str:
         """
         Calculate a function selector from name and input types.
         
@@ -380,8 +380,8 @@ class Decoder:
     
     @staticmethod
     def decode_command_with_abi(
-        command_data: Union[str, bytes], 
-        abi: List[Dict[str, Any]] = None,
+        command_data: str | bytes, 
+        abi: list[dict[str, Any]] = None,
         contract_address: str = None
     ) -> DecodedCommand:
         """

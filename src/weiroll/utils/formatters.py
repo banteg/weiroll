@@ -10,7 +10,7 @@ from eth_utils import is_address, to_checksum_address, encode_hex
 
 
 def format_value(
-    hex_value: Union[str, int, bytes], param_type: Optional[str] = None
+    hex_value: str | int | bytes, param_type: str | None = None
 ) -> str:
     """
     Format a hex value based on its inferred type.

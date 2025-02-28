@@ -3,10 +3,10 @@ from eth_utils import to_checksum_address
 from .formatters import format_value
 
 def render_tree(
-    commands: List[Dict[str, Any]], 
-    state: List[Any],
-    call_types: List[str],
-    contracts: Optional[Dict[str, Any]] = None
+    commands: list[dict[str, Any]], 
+    state: list[Any],
+    call_types: list[str],
+    contracts: dict[str, Any] | None = None
 ) -> str:
     """
     Renders a plan execution tree.

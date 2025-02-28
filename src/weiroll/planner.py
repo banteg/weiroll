@@ -25,8 +25,8 @@ class Planner:
     """
     
     def __init__(self):
-        self.commands: List[Command] = []
-        self.state: List[Any] = []
+        self.commands: list[Command] = []
+        self.state: list[Any] = []
         self.next_state_index: int = 0
     
     def _add_to_state(self, value: Any, is_dynamic: bool = False) -> int:
@@ -76,7 +76,7 @@ class Planner:
             ```
         """
         # Process arguments
-        input_args: List[CommandArg] = []
+        input_args: list[CommandArg] = []
         
         # Handle value for value calls
         if fn_call.call_type == CallType.VALUECALL and fn_call.fn.value > 0:
@@ -114,7 +114,7 @@ class Planner:
         
     # We're now using direct type checking in the plan() method instead of singledispatchmethod
     
-    def plan(self) -> Dict[Literal["commands", "state"], List[str]]:
+    def plan(self) -> dict[Literal["commands", "state"], list[str]]:
         """
         Generate the commands and state for VM execution.
         

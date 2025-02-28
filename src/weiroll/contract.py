@@ -1,4 +1,5 @@
-from typing import Any, Callable, Dict, List, Optional, Union, TypeVar, cast
+from typing import Any, Dict, List, Optional, Union, TypeVar, cast
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from eth_abi import encode
@@ -85,7 +86,7 @@ class FunctionCall:
     """
     
     fn: ContractFunction
-    args: List[Any]
+    args: list[Any]
     
     def with_value(self, value: int) -> 'FunctionCall':
         """
@@ -184,7 +185,7 @@ class Contract:
     def __init__(
         self, 
         address: str, 
-        abi: Optional[List[Dict[str, Any]]], 
+        abi: list[dict[str, Any]] | None, 
         call_type: CallType = CallType.CALL
     ):
         if not is_address(address):
@@ -195,7 +196,7 @@ class Contract:
             
         self.address = to_checksum_address(address)
         self.abi = abi
-        self.functions: Dict[str, ContractFunction] = {}
+        self.functions: dict[str, ContractFunction] = {}
         self.call_type = call_type
         
         self._process_abi()

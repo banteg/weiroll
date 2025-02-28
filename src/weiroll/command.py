@@ -30,8 +30,8 @@ class Command:
     """Represents a command in the Weiroll VM."""
     function_selector: bytes
     target: bytes
-    inputs: List[CommandArg]
-    output: Optional[CommandArg] = None
+    inputs: list[CommandArg]
+    output: CommandArg | None = None
     call_type: CallType = CallType.DELEGATECALL
     is_tuple_return: bool = False  # For raw value capture of return values
     extended_inputs: bool = False  # For handling more than 6 arguments
@@ -77,7 +77,7 @@ class Command:
         return selector + flags + padded_inputs + output_byte + target
 
     @classmethod
-    def decode(cls, data: Union[bytes, str]) -> "Command":
+    def decode(cls, data: bytes | str) -> "Command":
         """Decode a bytes32 command."""
         if isinstance(data, str):
             data = to_bytes(hexstr=data)
