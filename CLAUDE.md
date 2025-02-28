@@ -9,13 +9,43 @@ The Python SDK provides bindings to interact with the Weiroll VM. It allows crea
 - Run Python tests: `uv run pytest tests/`
 - Run single test: `uv run pytest tests/test_file.py::test_name -v`
 
-### Features
-- **Contract adapters:** Support for both web3.py and ape contracts
-- **Planner:** Build and serialize execution plans
-- **Command generation:** Create command sequences for the VM
-- **Exception handling:** Custom exceptions for robust error handling
+### Contract Adapters
+Weiroll provides adapters for different contract interfaces:
 
-### Example Usage
+1. **Web3.py contracts**:
+   ```python
+   from weiroll import Contract
+   contract = Contract.createContract(web3_contract)
+   ```
+
+2. **Ape contracts**:
+   ```python
+   from weiroll import Contract
+   contract = Contract.createContract(ape_contract)
+   ```
+
+3. **Direct ABI**:
+   ```python
+   from weiroll import Contract
+   contract = Contract(address, abi_list)
+   ```
+
+4. **With ethpm_types**:
+   ```python
+   from ethpm_types import ContractType
+   contract_type = ContractType.model_validate_json(json_text)
+   model_data = contract_type.model_dump()
+   contract = Contract(address, model_data['abi'])
+   ```
+
+### Exception Handling
+Custom exceptions available in `weiroll.exceptions`:
+
+- `WeirollError`: Base exception for all Weiroll-related errors
+- `InvalidContractError`: Raised when a contract object is invalid or unsupported
+- `EmptyABIError`: Raised when a contract ABI is empty or None
+
+### Full Example Usage
 ```python
 from weiroll import Contract, Planner, CallType
 
@@ -26,16 +56,21 @@ contract = Contract.createContract(ape_contract)   # For ape contracts
 
 # Create a planner and add operations
 planner = Planner()
-planner.add(contract.someFunction(arg1, arg2))
+recipient = "0x0987654321098765432109876543210987654321"
+amount = 100 * 10**18  # 100 tokens
+planner.add(contract.transfer(recipient, amount))
 
 # Get the serialized plan
 plan = planner.plan()
+# Contains commands and state for VM execution
 ```
 
 ### Testing
+- **Command**: `uv run pytest tests/`
 - **Test framework:** pytest
 - **Mocking:** unittest.mock for contract mocks
 - **Integration tests:** Tests for web3.py and ape integrations
+- **Test data**: `tests/data/` directory contains example ABIs for testing
 
 ## Solidity (Contract Development)
 
