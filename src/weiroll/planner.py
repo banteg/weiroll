@@ -99,9 +99,13 @@ class Planner:
             elif isinstance(value, list):
                 # Handle arrays (simplified - assumes homogeneous types)
                 if all(isinstance(x, int) for x in value):
+                    # Array of integers
                     encoded_state.append('0x' + encode(['uint256[]'], [value]).hex())
+                elif all(isinstance(x, str) and x.startswith('0x') for x in value):
+                    # Array of addresses (0x-prefixed strings)
+                    encoded_state.append('0x' + encode(['address[]'], [value]).hex())
                 else:
-                    raise ValueError(f"Unsupported array type at index {i}")
+                    raise ValueError(f"Unsupported array type at index {i} - arrays must contain only integers or Ethereum addresses")
             else:
                 raise ValueError(f"Unsupported state value type at index {i}: {type(value)}")
         
