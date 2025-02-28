@@ -30,9 +30,6 @@ class ContractFunction:
     
     def withValue(self, value: int) -> 'ContractFunction':
         """Set the ETH value for the call."""
-        if self.call_type != CallType.CALL:
-            raise ValueError("Cannot send value with non-CALL type functions")
-        
         # Create a copy with value call type
         result = ContractFunction(
             self.contract, self.fn_name, self.fn_sig, CallType.VALUECALL
