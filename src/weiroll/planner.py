@@ -111,56 +111,7 @@ class Planner:
         self.commands.append(command)
         return output
         
-    @singledispatchmethod
-    def _encode_state_value(self, value: Any, index: int) -> str:
-        """
-        Encode a state value for VM execution.
-        
-        Args:
-            value: The value to encode
-            index: Index of the value in the state array
-            
-        Raises:
-            ValueError: If the value type is not supported
-        """
-        raise ValueError(f"Unsupported state value type at index {index}: {type(value)}")
-    
-    @_encode_state_value.register
-    def _(self, value: type(None), index: int) -> str:
-        """Encode None values as empty."""
-        return '0x'
-        
-    @_encode_state_value.register(int)
-    @_encode_state_value.register(bool)
-    def _(self, value: Union[int, bool], index: int) -> str:
-        """Encode integers and booleans as uint256."""
-        if isinstance(value, bool):
-            value = int(value)
-        return '0x' + encode(['uint256'], [value]).hex()
-        
-    @_encode_state_value.register(str)
-    def _(self, value: str, index: int) -> str:
-        """Encode strings."""
-        if value.startswith('0x'):
-            return value
-        return '0x' + encode(['string'], [value]).hex()
-        
-    @_encode_state_value.register(bytes)
-    def _(self, value: bytes, index: int) -> str:
-        """Encode raw bytes."""
-        return '0x' + value.hex()
-        
-    @_encode_state_value.register(list)
-    def _(self, value: list, index: int) -> str:
-        """Encode lists/arrays."""
-        if all(isinstance(x, int) for x in value):
-            # Array of integers
-            return '0x' + encode(['uint256[]'], [value]).hex()
-        elif all(isinstance(x, str) and x.startswith('0x') for x in value):
-            # Array of addresses (0x-prefixed strings)
-            return '0x' + encode(['address[]'], [value]).hex()
-        else:
-            raise ValueError(f"Unsupported array type at index {index} - arrays must contain only integers or Ethereum addresses")
+    # We're now using direct type checking in the plan() method instead of singledispatchmethod
     
     def plan(self) -> Dict[Literal["commands", "state"], List[str]]:
         """
@@ -183,6 +134,11 @@ class Planner:
         encoded_commands = []
         encoded_state = []
         
+        # Debug: print the entire state array
+        print(f"DEBUG - State array contents:")
+        for i, value in enumerate(self.state):
+            print(f"DEBUG - State[{i}]: {repr(value)}, type: {type(value).__name__}")
+        
         # Encode commands
         for cmd in self.commands:
             encoded_commands.append('0x' + cmd.encode().hex())
@@ -190,10 +146,45 @@ class Planner:
         # Encode state
         for i, value in enumerate(self.state):
             try:
-                encoded_state.append(self._encode_state_value(value, i))
+                # Handle each type directly instead of using singledispatchmethod
+                if value is None:
+                    encoded_state.append('0x')
+                elif isinstance(value, (int, bool)):
+                    # Encode integers and booleans as uint256
+                    if isinstance(value, bool):
+                        value = int(value)
+                    encoded_state.append('0x' + encode(['uint256'], [value]).hex())
+                elif isinstance(value, str):
+                    if value.startswith('0x'):
+                        # Ethereum address or hex value, pass through as is
+                        print(f"DEBUG - String value at index {i} starts with 0x, passing through: {value}")
+                        encoded_state.append(value)
+                    else:
+                        # Regular string
+                        print(f"DEBUG - Encoding string at index {i} as ABI string: {value}")
+                        encoded_state.append('0x' + encode(['string'], [value]).hex())
+                elif isinstance(value, bytes):
+                    # Raw bytes
+                    encoded_state.append('0x' + value.hex())
+                elif isinstance(value, list):
+                    # Handle arrays
+                    if all(isinstance(x, int) for x in value):
+                        # Array of integers
+                        encoded_state.append('0x' + encode(['uint256[]'], [value]).hex())
+                    elif all(isinstance(x, str) and x.startswith('0x') for x in value):
+                        # Array of addresses
+                        encoded_state.append('0x' + encode(['address[]'], [value]).hex())
+                    else:
+                        raise ValueError(f"Unsupported array type at index {i} - arrays must contain only integers or Ethereum addresses")
+                else:
+                    raise ValueError(f"Unsupported state value type at index {i}: {type(value)}")
             except ValueError as e:
                 # Re-raise with better error message
                 raise ValueError(f"Failed to encode state at index {i}: {e}")
+            except Exception as e:
+                # Catch other exceptions for better debugging
+                print(f"DEBUG - Exception while encoding value at index {i}: {repr(value)}, error: {type(e).__name__}: {str(e)}")
+                raise ValueError(f"Error encoding value at index {i}: {e}")
         
         # Pad state array to match next_state_index
         while len(encoded_state) < self.next_state_index:
@@ -215,3 +206,163 @@ class Planner:
     def __repr__(self) -> str:
         """Return a string representation of the planner."""
         return f"Planner(commands={len(self.commands)}, state_size={len(self.state)})"
+        
+    def show_tree(self) -> str:
+        """
+        Display the execution plan as a tree, showing data dependencies.
+        
+        Returns:
+            str: A formatted string representation of the execution tree
+        """
+        if not self.commands:
+            return "Empty plan (no commands)"
+        
+        # Initialize the result
+        result = ["Execution Plan:", ""]
+        
+        # Find the highest state index
+        max_state_index = self.next_state_index - 1
+        if self.state:
+            max_state_index = max(max_state_index, len(self.state) - 1)
+        
+        # Create a map of state values to their sources (which command created them)
+        state_sources = {}
+        state_usage = {i: [] for i in range(max_state_index + 1)}
+        
+        # Track which commands use which state values
+        for i, cmd in enumerate(self.commands):
+            # The command produces an output state value
+            if cmd.output:
+                state_sources[cmd.output.index] = i
+                # Make sure the output index is in state_usage
+                if cmd.output.index not in state_usage:
+                    state_usage[cmd.output.index] = []
+            
+            # Record which state values this command uses
+            for arg in cmd.inputs:
+                # Make sure the index is in state_usage
+                if arg.index not in state_usage:
+                    state_usage[arg.index] = []
+                state_usage[arg.index].append(i)
+        
+        # Create a list of formatted lines for each command
+        for i, cmd in enumerate(self.commands):
+            # Format the command
+            target_address = "0x" + cmd.target.hex()[-40:]
+            selector_hex = "0x" + cmd.function_selector.hex()
+            
+            # Try to extract the function name from the 4byte selector
+            # Common Ethereum function signatures
+            common_signatures = {
+                "0x095ea7b3": "approve(address,uint256)",
+                "0xa9059cbb": "transfer(address,uint256)",
+                "0x23b872dd": "transferFrom(address,address,uint256)",
+                "0x70a08231": "balanceOf(address)",
+                "0xdd62ed3e": "allowance(address,address)",
+                "0x313ce567": "decimals()",
+                "0x06fdde03": "name()",
+                "0x95d89b41": "symbol()",
+                "0x18160ddd": "totalSupply()",
+                "0x6b62f89f": "deposit(uint256)",
+                "0x2e1a7d4d": "withdraw(uint256)",
+                "0xa694fc3a": "stake(uint256)",
+                "0xadc9772e": "withdraw(address,uint256)",
+                "0xd0e30db0": "deposit()",
+                "0x9dc29fac": "burn(address,uint256)",
+                "0xbd6d894d": "mint(address,uint256)",
+            }
+            
+            fn_name = common_signatures.get(selector_hex, f"function({selector_hex})")
+            
+            # Format the command with its index
+            line = [f"Command {i}: {fn_name} @ {target_address} [{cmd.call_type.name}]"]
+            
+            # Add input arguments
+            if cmd.inputs:
+                input_lines = []
+                for j, arg in enumerate(cmd.inputs):
+                    source_str = ""
+                    if arg.index in state_sources and state_sources[arg.index] != i:
+                        # This input comes from another command's output
+                        source_cmd = state_sources[arg.index]
+                        source_str = f" (from Command {source_cmd} output)"
+                    
+                    # Add the value if it's a literal
+                    value_str = ""
+                    if arg.index < len(self.state) and arg.index not in state_sources:
+                        try:
+                            # Try to format the value nicely
+                            value = self.state[arg.index]
+                            if value is None:
+                                value_str = " = None"
+                            elif isinstance(value, str) and value.startswith("0x"):
+                                # Format addresses nicely
+                                value_str = f" = {value[:10]}...{value[-8:]}" if len(value) > 20 else f" = {value}"
+                            elif isinstance(value, int):
+                                # Format large integers with commas and check for units
+                                if value > 10**18 and value % 10**18 == 0:
+                                    value_str = f" = {value // 10**18} tokens (10^18 units)"
+                                elif value > 10**9 and value % 10**9 == 0:
+                                    value_str = f" = {value // 10**9} Gwei (10^9 units)"
+                                else:
+                                    value_str = f" = {value:,}"
+                            elif isinstance(value, (list, tuple)):
+                                if len(value) <= 3:
+                                    items = ", ".join(str(x)[:20] for x in value)
+                                    value_str = f" = [{items}]"
+                                else:
+                                    value_str = f" = [{len(value)} items]"
+                            else:
+                                value_str = f" = {value}"
+                        except Exception as e:
+                            # Add a debug message but continue
+                            print(f"DEBUG - Error formatting value at index {arg.index}: {e}")
+                            pass
+                    
+                    # Format based on the function signature if known
+                    arg_name = ""
+                    if "(" in fn_name and ")" in fn_name:
+                        # Try to extract parameter names from the signature
+                        params_str = fn_name.split("(")[1].split(")")[0]
+                        params = params_str.split(",")
+                        # If this is a value call with a value argument at index 0,
+                        # adjust the parameter index
+                        param_index = j
+                        if cmd.call_type.name == "VALUECALL" and j > 0:
+                            param_index = j - 1  # Skip the value parameter
+                        
+                        if param_index < len(params):
+                            param_type = params[param_index]
+                            if param_type == "address":
+                                arg_name = " (address)"
+                            elif param_type.startswith("uint"):
+                                arg_name = f" ({param_type})"
+                    
+                    # If this is the first argument of a VALUECALL, it's the ETH value
+                    if cmd.call_type.name == "VALUECALL" and j == 0:
+                        input_lines.append(f"  ├─ Value: {value_str if value_str else 'State[' + str(arg.index) + ']'}{source_str}")
+                    else:
+                        prefix = "  ├─" if j < len(cmd.inputs) - 1 or cmd.output else "  └─"
+                        input_lines.append(f"{prefix} Input {j}{arg_name}: State[{arg.index}]{source_str}{value_str}")
+                
+                line.extend(input_lines)
+            
+            # Add output state if any
+            if cmd.output:
+                uses = state_usage.get(cmd.output.index, [])
+                # Filter out this command itself
+                uses = [u for u in uses if u != i]
+                
+                if uses:
+                    target_commands = ", ".join(f"Command {u}" for u in uses)
+                    usage_str = f" (→ {target_commands})"
+                else:
+                    usage_str = " (unused)"
+                
+                line.append(f"  └─ Output: State[{cmd.output.index}]{usage_str}")
+            
+            # Add the command to the result
+            result.extend(line)
+            result.append("")  # Empty line between commands
+            
+        return "\n".join(result)
