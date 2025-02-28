@@ -60,7 +60,7 @@ def test_contract_adapter_mock():
     mock_contract = MockContract()
     
     # Test web3.py style
-    weiroll_contract = Contract.createContract(mock_contract)
+    weiroll_contract = Contract.create_contract(mock_contract)
     assert weiroll_contract.address.lower() == mock_contract.address.lower()
     assert weiroll_contract.call_type == CallType.CALL
     assert "balanceOf" in weiroll_contract.functions
@@ -69,14 +69,14 @@ def test_contract_adapter_mock():
     # Test ape style with contract_type attribute
     new_mock = MockContract()  # Create a new instance
     new_mock.abi = None  # Remove abi to force using contract_type path
-    weiroll_contract_ape = Contract.createContract(new_mock)
+    weiroll_contract_ape = Contract.create_contract(new_mock)
     assert weiroll_contract_ape.address.lower() == new_mock.address.lower()
     assert weiroll_contract_ape.call_type == CallType.CALL
     assert "balanceOf" in weiroll_contract_ape.functions
     assert "transfer" in weiroll_contract_ape.functions
     
     # Test library flag
-    library_contract = Contract.createLibrary(mock_contract)
+    library_contract = Contract.create_library(mock_contract)
     assert library_contract.call_type == CallType.DELEGATECALL
 
 
@@ -99,7 +99,7 @@ def test_planner_integration_with_mock():
     recipient_address = "0x0987654321098765432109876543210987654321"
     
     # Wrap with Weiroll
-    weiroll_token = Contract.createContract(token)
+    weiroll_token = Contract.create_contract(token)
     
     # Create a plan
     planner = Planner()

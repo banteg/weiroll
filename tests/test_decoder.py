@@ -49,7 +49,7 @@ def test_plan_decoding():
     
     # Create a mock contract
     math_contract = MockContract(math_addr, math_abi)
-    math = Contract.createLibrary(math_contract)
+    math = Contract.create_library(math_contract)
     
     # Create a planner with a few operations
     planner = Planner()

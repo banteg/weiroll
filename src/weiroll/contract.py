@@ -67,11 +67,6 @@ class ContractFunction:
         result.value = value
         return result
         
-    # Keep the camelCase version for backward compatibility
-    def withValue(self, value: int) -> 'ContractFunction':
-        """Set the ETH value for the call (deprecated, use with_value instead)."""
-        return self.with_value(value)
-        
     def __repr__(self) -> str:
         """Return a string representation of the function."""
         return f"ContractFunction(name='{self.fn_name}', sig='{self.fn_sig}', call_type={self.call_type.name})"
@@ -102,11 +97,6 @@ class FunctionCall:
         """
         new_fn = self.fn.with_value(value)
         return FunctionCall(new_fn, self.args)
-    
-    # Keep camelCase for backward compatibility
-    def withValue(self, value: int) -> 'FunctionCall':
-        """Set the ETH value for the call (deprecated, use with_value instead)."""
-        return self.with_value(value)
         
     def staticcall(self) -> 'FunctionCall':
         """
@@ -141,11 +131,6 @@ class FunctionCall:
         # Implementation is not complete - would need to track this flag
         # through to the Command object
         return new_call
-        
-    # Keep camelCase for backward compatibility
-    def rawValue(self) -> 'FunctionCall':
-        """Capture the entire return value as bytes (deprecated, use raw_value)."""
-        return self.raw_value()
     
     @property
     def selector(self) -> bytes:
@@ -351,12 +336,6 @@ class Contract:
         
         raise InvalidContractError("Unsupported contract object type. Must be a web3.py or ape contract.")
     
-    # Keep camelCase for backward compatibility
-    @staticmethod
-    def createContract(contract_obj: Any, call_type: CallType = CallType.CALL) -> 'Contract':
-        """Create a Contract from a web3.py or ape contract object (deprecated, use create_contract)."""
-        return Contract.create_contract(contract_obj, call_type)
-    
     @staticmethod
     def create_library(contract_obj: Any) -> 'Contract':
         """
@@ -374,12 +353,6 @@ class Contract:
             EmptyABIError: If the contract ABI is empty or None
         """
         return Contract.create_contract(contract_obj, CallType.DELEGATECALL)
-        
-    # Keep camelCase for backward compatibility
-    @staticmethod
-    def createLibrary(contract_obj: Any) -> 'Contract':
-        """Create a library Contract (deprecated, use create_library)."""
-        return Contract.create_library(contract_obj)
 
 
 @dataclass

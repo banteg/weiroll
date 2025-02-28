@@ -41,12 +41,12 @@ def test_tuple_rawvalue():
     ]
     
     mock_contract = MockContract(SAMPLE_ADDRESS, tuple_abi)
-    test_contract = Contract.createLibrary(mock_contract)
+    test_contract = Contract.create_library(mock_contract)
     
     # Create a plan with rawValue
     planner = Planner()
     # This would need to be implemented in our SDK
-    # tuple_result = planner.add(test_contract.returnsTuple().rawValue())
+    # tuple_result = planner.add(test_contract.returnsTuple().raw_value())
     # planner.add(test_contract.acceptsBytes(tuple_result))
     
     # For now just verify the basic case works

@@ -32,7 +32,7 @@ def test_planner_basic():
     
     # Create a Contract instance
     mock_contract = MockContract(address, abi)
-    contract = Contract.createContract(mock_contract)
+    contract = Contract.create_contract(mock_contract)
     
     # Create a Planner
     planner = Planner()
@@ -100,7 +100,7 @@ def test_planner_chained_operations():
     
     # Create a Contract instance
     mock_contract = MockContract(address, abi)
-    contract = Contract.createContract(mock_contract)
+    contract = Contract.create_contract(mock_contract)
     
     # Create a Planner
     planner = Planner()
@@ -136,7 +136,7 @@ def test_planner_with_value_call():
     
     # Create a Contract instance
     mock_contract = MockContract(address, abi)
-    contract = Contract.createContract(mock_contract)
+    contract = Contract.create_contract(mock_contract)
     
     # Get the deposit function and set it to use CALL
     deposit_fn = contract.deposit
@@ -145,7 +145,7 @@ def test_planner_with_value_call():
     planner = Planner()
     
     # Add a value call
-    planner.add(deposit_fn().withValue(1000000000000000000))  # 1 ETH
+    planner.add(deposit_fn().with_value(1000000000000000000))  # 1 ETH
     
     # Verify the command
     assert len(planner.commands) == 1

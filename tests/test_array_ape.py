@@ -21,9 +21,9 @@ def test_array_in_planner_with_ape_contracts(dev, ape_dai, ape_weth, ape_uniswap
     print(f"Uniswap Router address: {ape_uniswap.address}")
     
     # Create Weiroll contract wrappers
-    dai_wei = Contract.createContract(ape_dai)
-    weth_wei = Contract.createContract(ape_weth)
-    uniswap_wei = Contract.createContract(ape_uniswap)
+    dai_wei = Contract.create_contract(ape_dai)
+    weth_wei = Contract.create_contract(ape_weth)
+    uniswap_wei = Contract.create_contract(ape_uniswap)
     
     # Create planner
     planner = Planner()
@@ -80,8 +80,8 @@ def test_array_in_planner_with_ape_contracts(dev, ape_dai, ape_weth, ape_uniswap
 def test_array_in_planner_with_mixed_address_types(dev, ape_dai, ape_weth, ape_uniswap):
     """Test using different formats of address arrays to identify which ones work"""
     # Create Weiroll contract wrappers
-    dai_wei = Contract.createContract(ape_dai)
-    uniswap_wei = Contract.createContract(ape_uniswap)
+    dai_wei = Contract.create_contract(ape_dai)
+    uniswap_wei = Contract.create_contract(ape_uniswap)
     
     # Create planner
     planner = Planner()

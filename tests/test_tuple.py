@@ -52,10 +52,10 @@ def test_tuple_return():
     
     # Create Contract instances
     multi_return_contract = MockContract(multi_return_addr, multi_return_abi)
-    multi_return = Contract.createContract(multi_return_contract)
+    multi_return = Contract.create_contract(multi_return_contract)
     
     tupler_contract = MockContract(tupler_addr, tupler_abi)
-    tupler = Contract.createContract(tupler_contract)
+    tupler = Contract.create_contract(tupler_contract)
     
     # Test first element extraction
     # Create a Planner

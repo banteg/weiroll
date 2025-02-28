@@ -16,9 +16,9 @@ pytestmark = pytest.mark.skipif(not APE_AVAILABLE, reason="ape is not installed"
 def test_decode_uniswap_path_array(ape_dai, ape_weth, ape_uniswap, recipient):
     """Test that address arrays used with Uniswap are properly encoded and can be decoded."""
     # Wrap contracts with Weiroll
-    dai_wei = Contract.createContract(ape_dai)
-    weth_wei = Contract.createContract(ape_weth) 
-    uniswap_wei = Contract.createContract(ape_uniswap)
+    dai_wei = Contract.create_contract(ape_dai)
+    weth_wei = Contract.create_contract(ape_weth) 
+    uniswap_wei = Contract.create_contract(ape_uniswap)
     
     # Create planner
     planner = Planner()

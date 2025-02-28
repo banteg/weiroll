@@ -32,7 +32,7 @@ def test_array_in_planner():
     
     # Create contract instance
     mock_contract = MockContract(address, abi)
-    contract = Contract.createContract(mock_contract)
+    contract = Contract.create_contract(mock_contract)
     
     # Create planner
     planner = Planner()

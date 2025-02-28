@@ -40,10 +40,10 @@ def test_simple_addition():
     
     # Create Contract instances
     math_contract = MockContract(math_addr, math_abi)
-    math = Contract.createContract(math_contract)
+    math = Contract.create_contract(math_contract)
     
     events_contract = MockContract(events_addr, events_abi)
-    events = Contract.createContract(events_contract)
+    events = Contract.create_contract(events_contract)
     
     # Create a Planner
     planner = Planner()
@@ -121,10 +121,10 @@ def test_string_operations():
     
     # Create Contract instances
     strings_contract = MockContract(strings_addr, strings_abi)
-    strings = Contract.createContract(strings_contract)
+    strings = Contract.create_contract(strings_contract)
     
     events_contract = MockContract(events_addr, events_abi)
-    events = Contract.createContract(events_contract)
+    events = Contract.create_contract(events_contract)
     
     # Create a Planner for concatenation
     concat_planner = Planner()
@@ -187,17 +187,17 @@ def test_value_call():
     
     # Create Contract instances
     payable_contract = MockContract(payable_addr, payable_abi)
-    payable = Contract.createContract(payable_contract)
+    payable = Contract.create_contract(payable_contract)
     
     events_contract = MockContract(events_addr, events_abi)
-    events = Contract.createContract(events_contract)
+    events = Contract.create_contract(events_contract)
     
     # Create a Planner
     planner = Planner()
     
     # Add a value call (1 ETH = 10^18 wei)
     amount = 1_000_000_000_000_000_000
-    planner.add(payable.pay().withValue(amount))
+    planner.add(payable.pay().with_value(amount))
     
     # Check balance
     balance = planner.add(payable.balance())
