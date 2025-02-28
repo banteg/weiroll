@@ -142,8 +142,12 @@ planner.add(contract.setName("Weiroll"))
 # Bytes
 planner.add(contract.setData(b"\x01\x02\x03"))
 
-# Arrays
-planner.add(contract.setArray([1, 2, 3]))
+# Integer arrays
+planner.add(contract.setIntArray([1, 2, 3]))
+
+# Address arrays (important: convert addresses to strings)
+path = [str(token1.address), str(token2.address), str(token3.address)]
+planner.add(router.swapExactTokensForTokens(amount, min_amount, path, recipient, deadline))
 
 # Using return values from previous operations
 amount = planner.add(token.balanceOf(my_address))
@@ -152,7 +156,20 @@ planner.add(token.transfer(recipient, amount))
 
 ## Integration with Web3 Libraries
 
-The SDK is designed to work with common web3 libraries:
+The SDK is designed to work with common web3 libraries and supports different argument types:
+
+### Important Notes About Arrays
+
+When passing arrays of addresses to contract functions, like with Uniswap's path parameter, you must convert each address to a string:
+
+```python
+# Correct - convert each address to string
+path = [str(token1.address), str(token2.address)]
+planner.add(router.swapExactTokensForTokens(amount, 0, path, recipient, deadline))
+
+# This would fail - not converting to strings
+# path = [token1.address, token2.address]  # Don't do this
+```
 
 ### Web3.py
 
@@ -172,6 +189,49 @@ vm = w3.eth.contract(address='0x...', abi=vm_abi)
 vm.functions.execute(plan["commands"], plan["state"]).transact({
     'from': w3.eth.accounts[0]
 })
+```
+
+### eth-ape
+
+```python
+from ape import Contract as ApeContract, accounts, chain
+from weiroll import Contract, Planner
+
+# Get contracts in ape
+token = ApeContract("0x6B175474E89094C44Da98b954EedeAC495271d0F")  # DAI
+router = ApeContract("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")  # Uniswap V2
+weth = ApeContract("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")  # WETH
+
+# Wrap contracts for weiroll
+dai_wei = Contract.createContract(token)
+router_wei = Contract.createContract(router)
+weth_wei = Contract.createContract(weth)
+
+# Create a planner for a swap operation
+planner = Planner()
+amount = 1000 * 10**18  # 1000 DAI
+deadline = chain.blocks[-1].timestamp + 3600  # 1 hour from now
+my_address = accounts[0].address
+
+# Approve and swap
+planner.add(dai_wei.approve(router.address, amount))
+weth_amount = planner.add(
+    router_wei.swapExactTokensForTokens(
+        amount,
+        0,  # min amount out
+        [str(token.address), str(weth.address)],  # path as string addresses
+        my_address,
+        deadline
+    )
+)
+planner.add(weth_wei.transfer(my_address, weth_amount))
+
+# Get the plan
+plan = planner.plan()
+
+# Get the VM contract and execute
+vm = ApeContract("0x...")  # VM address
+vm.execute(plan["commands"], plan["state"], sender=accounts[0])
 ```
 
 ### eth-brownie

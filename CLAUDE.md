@@ -20,7 +20,10 @@ Weiroll provides adapters for different contract interfaces:
 
 2. **Ape contracts**:
    ```python
+   from ape import Contract as ApeContract
    from weiroll import Contract
+   
+   ape_contract = ApeContract("0x6B175474E89094C44Da98b954EedeAC495271d0F")
    contract = Contract.createContract(ape_contract)
    ```
 
@@ -65,12 +68,46 @@ plan = planner.plan()
 # Contains commands and state for VM execution
 ```
 
+### Working with Address Arrays
+When using functions that take arrays of addresses (like Uniswap's swap paths), 
+always convert the addresses to strings:
+
+```python
+from ape import Contract as ApeContract
+from weiroll import Contract, Planner
+
+# Get token contracts
+dai = ApeContract("0x6B175474E89094C44Da98b954EedeAC495271d0F")
+usdc = ApeContract("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+weth = ApeContract("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
+
+# Wrap Uniswap router for weiroll
+router = Contract.createContract(ApeContract("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"))
+
+# Create swap path with string addresses
+path = [str(dai.address), str(weth.address), str(usdc.address)]
+
+# Use the path in a swap operation
+planner = Planner()
+planner.add(
+    router.swapExactTokensForTokens(
+        amount_in,
+        amount_out_min,
+        path,  # array of string addresses
+        recipient,
+        deadline
+    )
+)
+```
+
 ### Testing
-- **Command**: `uv run pytest tests/`
-- **Test framework:** pytest
-- **Mocking:** unittest.mock for contract mocks
-- **Integration tests:** Tests for web3.py and ape integrations
-- **Test data**: `tests/data/` directory contains example ABIs for testing
+- **Commands**: 
+  - Run all tests: `uv run ape test`
+  - Run specific tests: `uv run ape test tests/test_file.py -v`
+- **Test framework:** pytest with Ape's testing plugin
+- **Fixtures:** Common contracts and accounts available in conftest.py
+- **Integration tests:** Tests for both web3.py and ape contracts
+- **Live contracts:** Tests use real mainnet contracts via forking
 
 ## Solidity (Contract Development)
 
