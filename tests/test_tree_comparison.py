@@ -7,16 +7,16 @@ from weiroll import Contract, Planner
 # Define the expected output
 expected_output = textwrap.dedent("""
 Command 0: balanceOf(address holder) -> uint256 @ 0x6B175474E89094C44Da98b954EedeAC495271d0F [CALL]
-  ├─ Input 0 (address): State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+  ├─ Input 0: State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
   └─ Output: State[1] (→ Command 1)
 
 Command 1: deposit(uint256 assets, address receiver) -> uint256 @ 0xd8063123BBA3B480569244AE66BFE72B6c84b00d [CALL]
-  ├─ Input 0 (uint256): State[1] (from Command 0 output)
-  ├─ Input 1 (address): State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+  ├─ Input 0: State[1] (from Command 0 output)
+  ├─ Input 1: State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
   └─ Output: State[2] (→ Command 2)
 
 Command 2: redeem(uint256 shares, address receiver, address owner) -> uint256 @ 0xd8063123BBA3B480569244AE66BFE72B6c84b00d [CALL]
-  ├─ Input 0 (uint256 shares): State[2] (from Command 1 output)
+  ├─ Input 0: State[2] (from Command 1 output)
   ├─ Input 1: State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
   ├─ Input 2: State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
   └─ Output: State[3] (unused)
