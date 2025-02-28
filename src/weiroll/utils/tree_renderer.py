@@ -114,7 +114,7 @@ def render_tree(
                 input_lines.append(f"{prefix} Input {j}{param_type}: State[{input_val}] (from Command {source_cmd} output)")
             else:
                 # Direct value - show the raw value
-                formatted_val = str(input_val)
+                formatted_val = format_value(input_val)
                 input_lines.append(f"{prefix} Input {j}{param_type}: {formatted_val}")
         
         # Format outputs

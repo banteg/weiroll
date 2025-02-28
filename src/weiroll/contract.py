@@ -3,6 +3,8 @@ from dataclasses import dataclass
 
 from eth_abi import encode
 from eth_utils import function_signature_to_4byte_selector, to_bytes, to_hex, to_checksum_address, is_address
+from web3 import Web3
+from ape import Contract as ApeContract
 
 from .constants import CallType
 from .command import Command, CommandArg

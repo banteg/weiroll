@@ -1,16 +1,27 @@
 from typing import Dict, List, Any, Optional, Tuple, Union, Literal
 from dataclasses import dataclass
-import logging
+
 from functools import lru_cache
+import logging
 
 import eth_abi
 from eth_utils import to_hex, to_bytes, to_checksum_address, function_signature_to_4byte_selector
+from ape import Contract as ApeContract
 
 from .command import Command
 from .constants import CallType, ArgType
+from .utils.formatters import format_value
+from .utils.tree_renderer import render_tree
 
 # Set up logger
 logger = logging.getLogger("weiroll.decoder")
+# Set to debug level
+logger.setLevel(logging.DEBUG)
+# Add console handler if not already present
+if not logger.handlers:
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)
+    logger.addHandler(console_handler)
 
 
 @dataclass
@@ -107,209 +118,23 @@ class DecodedPlan:
         """
         if not self.commands:
             return "Empty plan (no commands)"
+            
+        # Convert decoded commands to the format expected by the renderer
+        commands_for_renderer = []
+        call_types = []
         
-        # Initialize the result
-        result = ["Execution Plan:", ""]
-        
-        # Find the highest state index
-        max_state_index = 0
         for cmd in self.commands:
-            if cmd.output is not None and cmd.output > max_state_index:
-                max_state_index = cmd.output
-            for inp in cmd.inputs:
-                if inp > max_state_index:
-                    max_state_index = inp
-        
-        # Create a map of state values to their sources (which command created them)
-        state_sources = {}
-        state_usage = {i: [] for i in range(max_state_index + 1)}
-        
-        # Track which commands use which state values
-        for i, cmd in enumerate(self.commands):
-            # The command produces an output state value
-            if cmd.output is not None:
-                state_sources[cmd.output] = i
-                # Make sure the output index is in state_usage
-                if cmd.output not in state_usage:
-                    state_usage[cmd.output] = []
+            commands_for_renderer.append({
+                "to": cmd.target,
+                "function": cmd.function.get('signature') if cmd.function else None,
+                "selector": cmd.selector,
+                "inputs": cmd.inputs,
+                "outputs": [cmd.output] if cmd.output is not None else []
+            })
+            call_types.append(cmd.call_type)
             
-            # Record which state values this command uses
-            for arg_index in cmd.inputs:
-                # Make sure the index is in state_usage
-                if arg_index not in state_usage:
-                    state_usage[arg_index] = []
-                state_usage[arg_index].append(i)
-        
-        # Create a list of formatted lines for each command
-        for i, cmd in enumerate(self.commands):
-            # Format the command
-            target_address = cmd.target
-            selector_hex = cmd.selector
-            
-            # Try to extract function name from selector if available
-            fn_name = f"function({selector_hex})"
-            
-            # Get function name from extended information if available
-            if hasattr(cmd, 'function') and cmd.function is not None and 'signature' in cmd.function:
-                fn_name = cmd.function['signature']
-            
-            # Format the command with its index
-            line = [f"Command {i}: {fn_name} @ {target_address} [{cmd.call_type}]"]
-            
-            # Add input arguments
-            if cmd.inputs:
-                input_lines = []
-                for j, arg_index in enumerate(cmd.inputs):
-                    source_str = ""
-                    if arg_index in state_sources and state_sources[arg_index] != i:
-                        # This input comes from another command's output
-                        source_cmd = state_sources[arg_index]
-                        source_str = f" (from Command {source_cmd} output)"
-                    
-                    # Add the value if it's a literal
-                    value_str = ""
-                    if arg_index < len(self.state) and arg_index not in state_sources:
-                        state_value = self.state[arg_index]
-                        
-                        # Get parameter type information if available
-                        param_type = None
-                        if "(" in fn_name and ")" in fn_name:
-                            try:
-                                parts = fn_name.split("(", 1)
-                                if len(parts) > 1:
-                                    params_str = parts[1].split(")", 1)[0]
-                                    params = params_str.split(",")
-                                    param_index = j
-                                    # Adjust for VALUECALL which has ETH value as first argument
-                                    if cmd.call_type == "VALUECALL" and j > 0:
-                                        param_index = j - 1  # Skip the value parameter
-                                    
-                                    if param_index < len(params):
-                                        param_type = params[param_index].strip()
-                            except (IndexError, ValueError):
-                                # Couldn't extract parameter type
-                                pass
-                        
-                        # Try to use Ape's decode_input if available
-                        try:
-                            if hasattr(cmd, 'function') and cmd.function is not None and 'signature' in cmd.function:
-                                from ape import Contract as ApeContract
-                                # Only attempt if we're not dealing with a value call's first arg (ETH value)
-                                if not (cmd.call_type == "VALUECALL" and j == 0):
-                                    try:
-                                        # Check if we can use Ape's decode_input for more accurate decoding
-                                        contract = ApeContract(target_address)
-                                        # Use Ape's direct input decoding or our own helper method
-                                        if hasattr(contract, 'decode_input') and cmd.selector:
-                                            # For special types like array or complex objects, we'd need more work
-                                            # but for simple cases like address and uint, we can use our helper
-                                            formatted_value = Decoder._format_hex_value(state_value, param_type)
-                                            value_str = f" = {formatted_value}"
-                                    except Exception as e:
-                                        logger.debug(f"Error decoding with contract: {e}")
-                            else:
-                                # If no function metadata, try our best
-                                formatted_value = Decoder._format_hex_value(state_value, param_type)
-                                value_str = f" = {formatted_value}"
-                        except ImportError:
-                            # Ape not available, use fallback
-                            formatted_value = Decoder._format_hex_value(state_value, param_type)
-                            value_str = f" = {formatted_value}"
-                        
-                        # If we still couldn't format, use basic formatting
-                        if not value_str:
-                            if state_value.startswith("0x"):
-                                # Ethereum address or hex value
-                                if len(state_value) > 20:
-                                    value_str = f" = {state_value[:10]}...{state_value[-8:]}"
-                                else:
-                                    value_str = f" = {state_value}"
-                            elif state_value == "":
-                                value_str = " = None"
-                            else:
-                                value_str = f" = {state_value}"
-                    
-                    # Format based on the function signature if known
-                    arg_name = ""
-                    if "(" in fn_name and ")" in fn_name:
-                        try:
-                            # Try to extract parameter names from the signature
-                            parts = fn_name.split("(", 1)
-                            if len(parts) > 1:
-                                params_str = parts[1].split(")", 1)[0]
-                                params = params_str.split(",")
-                                # If this is a value call with a value argument at index 0,
-                                # adjust the parameter index
-                                param_index = j
-                                if cmd.call_type == "VALUECALL" and j > 0:
-                                    param_index = j - 1  # Skip the value parameter
-                                
-                                if param_index < len(params):
-                                    param_type = params[param_index]
-                                    if param_type == "address":
-                                        arg_name = " (address)"
-                                    elif param_type.startswith("uint"):
-                                        arg_name = f" ({param_type})"
-                        except (IndexError, ValueError):
-                            # Ignore formatting errors with function signatures
-                            pass
-                    
-                    # If this is the first argument of a VALUECALL, it's the ETH value
-                    if cmd.call_type == "VALUECALL" and j == 0:
-                        # Try to format as ETH value if we have a state value
-                        eth_value_str = value_str
-                        if arg_index < len(self.state) and arg_index not in state_sources:
-                            state_value = self.state[arg_index]
-                            try:
-                                # Special formatting for ETH values
-                                if state_value.startswith("0x"):
-                                    clean_hex = state_value[2:] if state_value.startswith("0x") else state_value
-                                    try:
-                                        int_val = int(clean_hex, 16)
-                                        if int_val > 0:
-                                            if int_val >= 10**18:
-                                                # Format as ETH with decimal
-                                                eth = int_val / 10**18
-                                                eth_value_str = f" = {eth:.4f} ETH"
-                                            elif int_val >= 10**9:
-                                                # Format as gwei
-                                                gwei = int_val / 10**9
-                                                eth_value_str = f" = {gwei:.2f} gwei"
-                                            else:
-                                                # Format as wei
-                                                eth_value_str = f" = {int_val:,} wei"
-                                    except (ValueError, OverflowError):
-                                        # If it's not a valid number, use default
-                                        pass
-                            except Exception:
-                                pass
-                        
-                        input_lines.append(f"  ├─ Value: {eth_value_str if eth_value_str else 'State[' + str(arg_index) + ']'}{source_str}")
-                    else:
-                        prefix = "  ├─" if j < len(cmd.inputs) - 1 or cmd.output is not None else "  └─"
-                        input_lines.append(f"{prefix} Input {j}{arg_name}: State[{arg_index}]{source_str}{value_str}")
-                
-                line.extend(input_lines)
-            
-            # Add output state if any
-            if cmd.output is not None:
-                uses = state_usage.get(cmd.output, [])
-                # Filter out this command itself
-                uses = [u for u in uses if u != i]
-                
-                if uses:
-                    target_commands = ", ".join(f"Command {u}" for u in uses)
-                    usage_str = f" (→ {target_commands})"
-                else:
-                    usage_str = " (unused)"
-                
-                line.append(f"  └─ Output: State[{cmd.output}]{usage_str}")
-            
-            # Add the command to the result
-            result.extend(line)
-            result.append("")  # Empty line between commands
-            
-        return "\n".join(result)
+        # Use the common renderer
+        return render_tree(commands_for_renderer, self.state, call_types)
 
 
 class Decoder:
@@ -374,23 +199,51 @@ class Decoder:
         function_info = None
         
         # Try to look up with ape if available
+        contract = ApeContract(target_address)
+        # Try to get the signature from the contract's identifier_lookup
+        # Try to use decode_input to get the correct function signature
         try:
-            from ape import Contract as ApeContract
-            try:
-                contract = ApeContract(target_address)
-                # Try to get the signature from the contract's identifier_lookup
-                if hasattr(contract, 'identifier_lookup') and selector in contract.identifier_lookup:
-                    identifier = contract.identifier_lookup[selector]
-                    function_info = {
-                        'name': identifier.name,
-                        'signature': identifier.signature,
-                        'selector': identifier.selector
-                    }
-            except Exception as e:
-                logger.debug(f"Error looking up function by identifier: {e}")
-        except ImportError:
-            # Ape not available, skip this lookup
-            pass
+            # Log the selector for debugging
+            logger.debug(f"Processing selector: {selector}")
+            
+            # Try to get the function info from identifier_lookup
+            if hasattr(contract, 'identifier_lookup') and selector in contract.identifier_lookup:
+                identifier = contract.identifier_lookup[selector]
+                function_signature = identifier.signature
+                function_name = identifier.name
+                logger.debug(f"Matched function via identifier_lookup: {function_signature}")
+            else:
+                # Use decode_input with enough data for the function to be identified
+                try:
+                    selector_bytes = bytes.fromhex(selector[2:] if selector.startswith('0x') else selector)
+                    # Add more placeholders to handle functions with multiple args
+                    min_calldata = selector_bytes + b'\x00' * 128  # 4 parameters x 32 bytes
+                    
+                    # Try to get the function signature from decode_input
+                    decoded_input = contract.decode_input(min_calldata)
+                    if decoded_input and len(decoded_input) > 0:
+                        # First element is the function signature string
+                        function_signature = decoded_input[0]
+                        function_name = function_signature.split('(')[0]
+                        logger.debug(f"Matched function via decode_input: {function_signature}")
+                    else:
+                        # If no signature found, use a generic one
+                        function_name = f"function"
+                        function_signature = f"function({selector})"
+                        logger.debug(f"Using generic function signature for selector: {selector}")
+                except Exception as e:
+                    logger.debug(f"Error in decode_input: {e}")
+                    # Fall back to a simpler selector-based name
+                    function_name = f"function"
+                    function_signature = f"function({selector})"
+            
+            function_info = {
+                'name': function_name,
+                'signature': function_signature,
+                'selector': selector  # Keep the original selector
+                }
+        except Exception as e:
+            logger.debug(f"Error looking up function by identifier: {e}")
         
         return DecodedCommand(
             selector=selector,
@@ -444,25 +297,64 @@ class Decoder:
             # For each target address, try to get ABI and function info in bulk
             for target, cmds in target_addresses.items():
                 # Try with ape if available
-                try:
-                    from ape import Contract as ApeContract
-                    contract = ApeContract(target)
+                contract = ApeContract(target)
                     
-                    # For each command targeting this contract
-                    for cmd in cmds:
-                        # Only process if function info not already set
-                        if not cmd.function:
-                            # Try to get the signature from the contract's identifier_lookup
+                # For each command targeting this contract
+                for cmd in cmds:
+                    # Only process if function info not already set
+                    if not cmd.function:
+                        # Try to get the signature from the contract's identifier_lookup
+                        # Try to use decode_input to get the correct function signature for this selector
+                        try:
+                            # Check identifier_lookup first (most reliable)
+                            selector = cmd.selector
+                            logger.debug(f"Processing selector in decode_plan: {selector}")
+                            
+                            # Use identifier lookup when available
+                            if hasattr(contract, 'identifier_lookup') and selector in contract.identifier_lookup:
+                                # Get function details from identifier lookup
+                                identifier = contract.identifier_lookup[selector]
+                                function_signature = identifier.signature
+                                function_name = identifier.name
+                                logger.debug(f"Matched function via identifier_lookup: {function_signature}")
+                            else:
+                                # Try to get a better signature from decode_input
+                                try:
+                                    selector_bytes = bytes.fromhex(selector[2:] if selector.startswith('0x') else selector)
+                                    # Use more zeros to handle functions with multiple parameters
+                                    min_calldata = selector_bytes + b'\x00' * 128  # Support up to 4 parameters
+                                    
+                                    # Use decode_input to get the function signature
+                                    decoded_input = contract.decode_input(min_calldata)
+                                    if decoded_input and len(decoded_input) > 0:
+                                        # First element is the function signature string
+                                        function_signature = decoded_input[0]
+                                        function_name = function_signature.split('(')[0]
+                                        logger.debug(f"Matched via decode_input: {function_signature}")
+                                    else:
+                                        # Default fallback if no signature found
+                                        function_signature = f"function({selector})"
+                                        function_name = "function"
+                                except Exception as e:
+                                    logger.debug(f"Error using decode_input: {e}")
+                                    # Fall back to a basic name
+                                    function_signature = f"function({selector})"
+                                    function_name = "function"
+                            
+                            cmd.function = {
+                                'name': function_name,
+                                'signature': function_signature,
+                                'selector': selector  # Keep the original selector
+                                }
+                        except Exception as e:
+                            logger.debug(f"Error using decode_input for cmd: {e}")
                             if hasattr(contract, 'identifier_lookup') and cmd.selector in contract.identifier_lookup:
                                 identifier = contract.identifier_lookup[cmd.selector]
                                 cmd.function = {
                                     'name': identifier.name,
                                     'signature': identifier.signature,
-                                    'selector': identifier.selector
-                                }
-                except (ImportError, Exception) as e:
-                    # Either ape not available or contract lookup failed
-                    logger.debug(f"Error enhancing commands for {target}: {e}")
+                                    'selector': cmd.selector  # Use the actual selector from the command
+                                    }
         
         return DecodedPlan(
             commands=decoded_commands,
@@ -485,88 +377,6 @@ class Decoder:
         signature = f"{name}({','.join(input_types)})"
         return to_hex(function_signature_to_4byte_selector(signature))
         
-    @staticmethod
-    def _format_hex_value(hex_value: str, param_type: str = None) -> str:
-        """
-        Intelligently format a hex value based on its likely type.
-        
-        Args:
-            hex_value: The hex string to format
-            param_type: Optional parameter type hint (e.g., 'uint256', 'address')
-            
-        Returns:
-            str: A nicely formatted string representation
-        """
-        # Return empty values as is
-        if not hex_value or hex_value == '0x':
-            return "None"
-            
-        # Strip 0x prefix for processing
-        clean_hex = hex_value[2:] if hex_value.startswith('0x') else hex_value
-        
-        # Try to detect the type based on format and/or param_type hint
-        if param_type:
-            param_type = param_type.strip()
-            
-            # Handle addresses
-            if param_type == 'address':
-                if len(clean_hex) <= 40:  # Addresses are 20 bytes
-                    return hex_value  # Return checksummed address
-                    
-            # Handle integers
-            elif param_type.startswith('uint') or param_type.startswith('int'):
-                try:
-                    int_val = int(clean_hex, 16)
-                    
-                    # Format common token amounts with decimals
-                    if int_val >= 10**18 and int_val % 10**18 == 0:
-                        return f"{int_val // 10**18} eth"
-                    elif int_val >= 10**6 and int_val % 10**6 == 0:
-                        return f"{int_val // 10**6} USDC"
-                    # Format large numbers with commas
-                    elif int_val > 10**5:
-                        return f"{int_val:,}"
-                    else:
-                        return str(int_val)
-                except ValueError:
-                    pass
-                    
-            # Handle booleans
-            elif param_type == 'bool':
-                if clean_hex == '01' or clean_hex == '0000000000000000000000000000000000000000000000000000000000000001':
-                    return "true"
-                elif clean_hex == '00' or clean_hex == '0000000000000000000000000000000000000000000000000000000000000000':
-                    return "false"
-        
-        # General formatting based on value patterns, without type hint
-        
-        # Check if it looks like an address (40 hex chars)
-        if len(clean_hex) <= 40 and all(c in '0123456789abcdefABCDEF' for c in clean_hex):
-            # Probably an address - return checksummed if possible
-            return f"0x{clean_hex}"
-            
-        # Long hex string, probably data or a large number
-        if len(clean_hex) > 40:
-            # Try to parse as a number first
-            try:
-                int_val = int(clean_hex, 16)
-                if int_val == 0:
-                    return "0"
-                # Format large numbers with unit suffixes
-                if int_val >= 10**18 and int_val % 10**18 == 0:
-                    return f"{int_val // 10**18} eth"
-                elif int_val >= 10**9 and int_val % 10**9 == 0:
-                    return f"{int_val // 10**9} gwei"
-                elif int_val > 10**5:
-                    return f"{int_val:,}"
-                else:
-                    return str(int_val)
-            except (ValueError, OverflowError):
-                # If it's not a valid number, truncate for display
-                return f"{hex_value[:10]}...{hex_value[-8:]}"
-                
-        # For short hex strings, just return as is
-        return hex_value
     
     @staticmethod
     def decode_command_with_abi(
@@ -600,65 +410,90 @@ class Decoder:
         # Only attempt to look up if not already found
         if not decoded.function:
             # 1. Try to get the function signature from the contract's identifier_lookup
+            contract = ApeContract(contract_address)
+            # Try to use decode_input to get the correct function signature for this selector
             try:
-                from ape import Contract as ApeContract
-                if contract_address:
-                    try:
-                        contract = ApeContract(contract_address)
-                        if hasattr(contract, 'identifier_lookup') and fn_selector in contract.identifier_lookup:
-                            identifier = contract.identifier_lookup[fn_selector]
-                            function_signature = identifier.signature
-                            function_selector = identifier.selector
-                            decoded.function = {
-                                "name": identifier.name,
-                                "signature": function_signature,
-                                "selector": function_selector
-                            }
-                    except Exception as e:
-                        logger.debug(f"Error looking up function by identifier: {e}")
-            except ImportError:
-                pass  # Ape not available
-            
-            # 2. Try to find the function in the provided ABI
-            if not decoded.function and abi:
-                # Try to match the function by selector
-                for item in abi:
-                    if item.get("type") != "function":
-                        continue
-                        
-                    name = item.get("name", "")
-                    inputs = item.get("inputs", [])
+                # For the deposit selector specifically, handle different versions
+                logger.debug(f"Processing selector in decode_command_with_abi: {fn_selector}")
+                
+                if fn_selector.lower() == "0xb6b55f25":  # deposit(uint256)
+                    function_signature = "deposit(uint256)"
+                    function_name = "deposit"
+                    logger.debug(f"Matched deposit(uint256) selector in decode_command_with_abi: {fn_selector}")
+                elif fn_selector.lower() == "0x6e553f65":  # deposit(uint256,address)
+                    function_signature = "deposit(uint256,address)"
+                    function_name = "deposit"
+                    logger.debug(f"Matched deposit(uint256,address) selector in decode_command_with_abi: {fn_selector}")
+                else:
+                    # For other selectors, use decode_input
+                    selector_bytes = bytes.fromhex(fn_selector[2:] if fn_selector.startswith('0x') else fn_selector)
+                    min_calldata = selector_bytes + b'\x00' * 32  # Add one parameter of zeros
                     
-                    # Skip if no name or no inputs section
-                    if not name or inputs is None:
-                        continue
-                        
-                    # Extract input types
-                    input_types = []
-                    for inp in inputs:
-                        if isinstance(inp, dict) and "type" in inp:
-                            input_types.append(inp["type"])
-                        else:
-                            # If input doesn't have a type, skip this function
-                            logger.warning(f"Skipping function {name} due to missing input type")
-                            break
+                    # Use decode_input to get the function signature
+                    decoded_input = contract.decode_input(min_calldata)
+                    if decoded_input and len(decoded_input) > 0:
+                        # First element is the function signature string
+                        function_signature = decoded_input[0]
+                        function_name = function_signature.split('(')[0]
+                    
+                    decoded.function = {
+                        "name": function_name,
+                        "signature": function_signature,
+                        "selector": fn_selector  # Keep the original selector
+                        }
+            except Exception as e:
+                # Fall back to identifier_lookup if decode_input fails
+                logger.debug(f"Error using decode_input in decode_command_with_abi: {e}")
+                if hasattr(contract, 'identifier_lookup') and fn_selector in contract.identifier_lookup:
+                    identifier = contract.identifier_lookup[fn_selector]
+                    function_signature = identifier.signature
+                    # Use the actual selector from the command to ensure we get the correct function
+                    decoded.function = {
+                        "name": identifier.name,
+                        "signature": function_signature,
+                        "selector": fn_selector
+                    }
+        
+        # 2. Try to find the function in the provided ABI
+        if not decoded.function and abi:
+            # Try to match the function by selector
+            for item in abi:
+                if item.get("type") != "function":
+                    continue
+                    
+                name = item.get("name", "")
+                inputs = item.get("inputs", [])
+                
+                # Skip if no name or no inputs section
+                if not name or inputs is None:
+                    continue
+                    
+                # Extract input types
+                input_types = []
+                for inp in inputs:
+                    if isinstance(inp, dict) and "type" in inp:
+                        input_types.append(inp["type"])
                     else:
-                        # Calculate selector for this function
-                        calculated_selector = Decoder._get_selector_for_function(name, input_types)
+                        # If input doesn't have a type, skip this function
+                        logger.warning(f"Skipping function {name} due to missing input type")
+                        break
+                else:
+                    # Calculate selector for this function
+                    calculated_selector = Decoder._get_selector_for_function(name, input_types)
+                    
+                    # If selectors match, we found the function
+                    if calculated_selector == fn_selector:
+                        fn_info = item
+                        function_signature = f"{name}({','.join(input_types)})"
                         
-                        # If selectors match, we found the function
-                        if calculated_selector == fn_selector:
-                            fn_info = item
-                            function_signature = f"{name}({','.join(input_types)})"
-                            
-                            # Set function info on the decoded command
-                            decoded.function = {
-                                "name": name,
-                                "signature": function_signature,
-                                "inputs": inputs,
-                                "outputs": item.get("outputs")
-                            }
-                            break
+                        # Set function info on the decoded command
+                        decoded.function = {
+                            "name": name,
+                            "signature": function_signature,
+                            "inputs": inputs,
+                            "outputs": item.get("outputs")
+                        }
+                        break
             
             # 3. Try to use 4byte.directory API or other signature sources
             # We'll only implement this placeholder for now - future enhancement

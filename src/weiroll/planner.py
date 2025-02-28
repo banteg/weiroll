@@ -4,11 +4,12 @@ from dataclasses import dataclass
 
 from eth_abi import encode
 from eth_utils import to_bytes, to_hex
+from ape import Contract as ApeContract
 
 from .command import Command, CommandArg
 from .constants import CallType, ArgType
 from .contract import FunctionCall, StateValue
-
+from .utils.tree_renderer import render_tree
 
 class Planner:
     """
@@ -216,145 +217,38 @@ class Planner:
         """
         if not self.commands:
             return "Empty plan (no commands)"
-        
-        # Initialize the result
-        result = ["Execution Plan:", ""]
-        
-        # Find the highest state index
-        max_state_index = self.next_state_index - 1
-        if self.state:
-            max_state_index = max(max_state_index, len(self.state) - 1)
-        
-        # Create a map of state values to their sources (which command created them)
-        state_sources = {}
-        state_usage = {i: [] for i in range(max_state_index + 1)}
-        
-        # Track which commands use which state values
-        for i, cmd in enumerate(self.commands):
-            # The command produces an output state value
-            if cmd.output:
-                state_sources[cmd.output.index] = i
-                # Make sure the output index is in state_usage
-                if cmd.output.index not in state_usage:
-                    state_usage[cmd.output.index] = []
             
-            # Record which state values this command uses
-            for arg in cmd.inputs:
-                # Make sure the index is in state_usage
-                if arg.index not in state_usage:
-                    state_usage[arg.index] = []
-                state_usage[arg.index].append(i)
+        # Convert commands to the format expected by the renderer
+        commands_for_renderer = []
+        call_types = []
         
-        # Create a list of formatted lines for each command
         for i, cmd in enumerate(self.commands):
-            # Format the command
             target_address = "0x" + cmd.target.hex()[-40:]
             selector_hex = "0x" + cmd.function_selector.hex()
             
-            # Try to extract the function name from the 4byte selector using contract's identifier_lookup
+            # Try to extract the function name from the 4byte selector
             fn_name = f"function({selector_hex})"  # Default if lookup fails
             
             try:
                 # Try to look up with Contract class from ape (if available)
-                from ape import Contract as ApeContract
                 contract = ApeContract(target_address)
                 
                 # Try to get the signature from the contract's identifier_lookup
                 if hasattr(contract, 'identifier_lookup') and selector_hex in contract.identifier_lookup:
                     fn_name = contract.identifier_lookup[selector_hex].signature
-            except (ImportError, Exception):
+            except (Exception):
                 # If ape is not available or there's an error, use the default
                 pass
-            
-            # Format the command with its index
-            line = [f"Command {i}: {fn_name} @ {target_address} [{cmd.call_type.name}]"]
-            
-            # Add input arguments
-            if cmd.inputs:
-                input_lines = []
-                for j, arg in enumerate(cmd.inputs):
-                    source_str = ""
-                    if arg.index in state_sources and state_sources[arg.index] != i:
-                        # This input comes from another command's output
-                        source_cmd = state_sources[arg.index]
-                        source_str = f" (from Command {source_cmd} output)"
-                    
-                    # Add the value if it's a literal
-                    value_str = ""
-                    if arg.index < len(self.state) and arg.index not in state_sources:
-                        try:
-                            # Try to format the value nicely
-                            value = self.state[arg.index]
-                            if value is None:
-                                value_str = " = None"
-                            elif isinstance(value, str) and value.startswith("0x"):
-                                # Format addresses nicely
-                                value_str = f" = {value[:10]}...{value[-8:]}" if len(value) > 20 else f" = {value}"
-                            elif isinstance(value, int):
-                                # Format large integers with commas and check for units
-                                if value > 10**18 and value % 10**18 == 0:
-                                    value_str = f" = {value // 10**18} tokens (10^18 units)"
-                                elif value > 10**9 and value % 10**9 == 0:
-                                    value_str = f" = {value // 10**9} Gwei (10^9 units)"
-                                else:
-                                    value_str = f" = {value:,}"
-                            elif isinstance(value, (list, tuple)):
-                                if len(value) <= 3:
-                                    items = ", ".join(str(x)[:20] for x in value)
-                                    value_str = f" = [{items}]"
-                                else:
-                                    value_str = f" = [{len(value)} items]"
-                            else:
-                                value_str = f" = {value}"
-                        except Exception as e:
-                            # Add a debug message but continue
-                            print(f"DEBUG - Error formatting value at index {arg.index}: {e}")
-                            pass
-                    
-                    # Format based on the function signature if known
-                    arg_name = ""
-                    if "(" in fn_name and ")" in fn_name:
-                        # Try to extract parameter names from the signature
-                        params_str = fn_name.split("(")[1].split(")")[0]
-                        params = params_str.split(",")
-                        # If this is a value call with a value argument at index 0,
-                        # adjust the parameter index
-                        param_index = j
-                        if cmd.call_type.name == "VALUECALL" and j > 0:
-                            param_index = j - 1  # Skip the value parameter
-                        
-                        if param_index < len(params):
-                            param_type = params[param_index]
-                            if param_type == "address":
-                                arg_name = " (address)"
-                            elif param_type.startswith("uint"):
-                                arg_name = f" ({param_type})"
-                    
-                    # If this is the first argument of a VALUECALL, it's the ETH value
-                    if cmd.call_type.name == "VALUECALL" and j == 0:
-                        input_lines.append(f"  ├─ Value: {value_str if value_str else 'State[' + str(arg.index) + ']'}{source_str}")
-                    else:
-                        prefix = "  ├─" if j < len(cmd.inputs) - 1 or cmd.output else "  └─"
-                        input_lines.append(f"{prefix} Input {j}{arg_name}: State[{arg.index}]{source_str}{value_str}")
                 
-                line.extend(input_lines)
-            
-            # Add output state if any
-            if cmd.output:
-                uses = state_usage.get(cmd.output.index, [])
-                # Filter out this command itself
-                uses = [u for u in uses if u != i]
-                
-                if uses:
-                    target_commands = ", ".join(f"Command {u}" for u in uses)
-                    usage_str = f" (→ {target_commands})"
-                else:
-                    usage_str = " (unused)"
-                
-                line.append(f"  └─ Output: State[{cmd.output.index}]{usage_str}")
-            
-            # Add the command to the result
-            result.extend(line)
-            result.append("")  # Empty line between commands
-            
-        return "\n".join(result)
+            # Format command for renderer
+            commands_for_renderer.append({
+                "to": target_address,
+                "function": fn_name,
+                "selector": selector_hex,
+                "inputs": [arg.index for arg in cmd.inputs],
+                "outputs": [cmd.output.index] if cmd.output else []
+            })
+            call_types.append(cmd.call_type.name)
+        
+        # Use the common renderer
+        return render_tree(commands_for_renderer, self.state, call_types)

@@ -14,6 +14,10 @@ def ape_uniswap():
     return ape.Contract("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
 
 @pytest.fixture
+def ape_farm():
+    return ape.Contract("0x6d225e974fa404d25ffb84ed6e242ffa18ef6430")
+
+@pytest.fixture
 def dev():
     return ape.accounts.test_accounts[0]
 
