@@ -91,7 +91,7 @@ class Planner:
                 input_args.append(arg.to_arg())
             else:
                 # Add literal value to state
-                is_dynamic = isinstance(arg, (bytes, str, list, tuple))
+                is_dynamic = isinstance(arg, bytes | str | list | tuple)
                 state_index = self._add_to_state(arg, is_dynamic)
                 input_args.append(CommandArg(index=state_index, is_dynamic=is_dynamic))
         
@@ -150,7 +150,7 @@ class Planner:
                 # Handle each type directly instead of using singledispatchmethod
                 if value is None:
                     encoded_state.append('0x')
-                elif isinstance(value, (int, bool)):
+                elif isinstance(value, int | bool):
                     # Encode integers and booleans as uint256
                     if isinstance(value, bool):
                         value = int(value)
