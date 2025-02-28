@@ -5,6 +5,12 @@
 ### Overview
 The Python SDK provides bindings to interact with the Weiroll VM. It allows creating plans, wrapping contracts, and generating command sequences to execute on-chain.
 
+### Key Features
+- **Command Execution:** Create and execute sequences of contract calls
+- **Plan Visualization:** Display plans as trees with `planner.show_tree()`
+- **Plan Decoding:** Decode encoded plans with enhanced visualization using `Decoder`
+- **Value Formatting:** Format large numbers and token amounts for readability
+
 ### Build Commands
 - Run Python tests: `uv run pytest tests/`
 - Run single test: `uv run pytest tests/test_file.py::test_name -v`
@@ -15,7 +21,7 @@ Weiroll provides adapters for different contract interfaces:
 1. **Web3.py contracts**:
    ```python
    from weiroll import Contract
-   contract = Contract.createContract(web3_contract)
+   contract = Contract.create_contract(web3_contract)
    ```
 
 2. **Ape contracts**:
@@ -24,7 +30,7 @@ Weiroll provides adapters for different contract interfaces:
    from weiroll import Contract
    
    ape_contract = ApeContract("0x6B175474E89094C44Da98b954EedeAC495271d0F")
-   contract = Contract.createContract(ape_contract)
+   contract = Contract.create_contract(ape_contract)
    ```
 
 3. **Direct ABI**:
@@ -41,6 +47,32 @@ Weiroll provides adapters for different contract interfaces:
    contract = Contract(address, model_data['abi'])
    ```
 
+### Plan Decoding Features
+
+Weiroll supports detailed plan decoding and visualization:
+
+```python
+from weiroll import Decoder
+
+# Decode a plan from commands and state
+decoded_plan = Decoder.decode_plan(commands, state)
+
+# View in tree format (same as planner.show_tree())
+print(decoded_plan)
+
+# Get detailed information about a specific command
+detailed_cmd = Decoder.decode_command_with_abi(
+    command_data,
+    contract_address="0x1234..."
+)
+```
+
+Value formatting will automatically:
+- Format token amounts with 18 decimals as "N × 10^18"
+- Format ETH values with appropriate units (ETH, gwei, wei)
+- Maintain checksummed addresses
+- Truncate long hex strings for readability
+
 ### Exception Handling
 Custom exceptions available in `weiroll.exceptions`:
 
@@ -48,14 +80,16 @@ Custom exceptions available in `weiroll.exceptions`:
 - `InvalidContractError`: Raised when a contract object is invalid or unsupported
 - `EmptyABIError`: Raised when a contract ABI is empty or None
 
-### Full Example Usage
+### Usage Examples
+
+#### Basic Plan Creation and Execution
 ```python
 from weiroll import Contract, Planner, CallType
 
 # Create a contract wrapper
-contract = Contract.createContract(web3_contract)  # For web3.py contracts
+contract = Contract.create_contract(web3_contract)  # For web3.py contracts
 # OR
-contract = Contract.createContract(ape_contract)   # For ape contracts
+contract = Contract.create_contract(ape_contract)   # For ape contracts
 
 # Create a planner and add operations
 planner = Planner()
@@ -63,9 +97,32 @@ recipient = "0x0987654321098765432109876543210987654321"
 amount = 100 * 10**18  # 100 tokens
 planner.add(contract.transfer(recipient, amount))
 
+# Visualize the plan
+print(planner.show_tree())
+
 # Get the serialized plan
 plan = planner.plan()
 # Contains commands and state for VM execution
+```
+
+#### Plan Decoding and Visualization
+```python
+from weiroll import Decoder, Planner, Contract
+
+# Assume we have a plan from somewhere
+plan = {
+    "commands": ["0x095ea7b3..."],
+    "state": ["0x..."]
+}
+
+# Decode the plan to make it human-readable
+decoded_plan = Decoder.decode_plan(plan["commands"], plan["state"])
+
+# Display the plan in tree format (same as planner.show_tree())
+print(decoded_plan)
+
+# Optionally reconstruct a Planner from the decoded plan
+reconstructed_planner = Decoder.to_planner(decoded_plan)
 ```
 
 ### Working with Address Arrays
