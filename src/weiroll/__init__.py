@@ -6,6 +6,7 @@ from .constants import CallType, ArgType
 from .command import Command, CommandArg
 from .contract import Contract, ContractFunction, FunctionCall, StateValue
 from .planner import Planner
+from .decoder import Decoder, DecodedCommand, DecodedPlan
 
 __all__ = [
     "CallType",
@@ -17,4 +18,7 @@ __all__ = [
     "FunctionCall",
     "StateValue",
     "Planner",
+    "Decoder",
+    "DecodedCommand",
+    "DecodedPlan",
 ]

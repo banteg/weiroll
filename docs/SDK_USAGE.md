@@ -215,6 +215,51 @@ except Exception as e:
     print(f"Execution error: {e}")
 ```
 
+## Decoding Weiroll Plans
+
+You can decode Weiroll commands and plans for inspection or debugging:
+
+```python
+from weiroll import Decoder
+
+# Decode a single command
+command_hex = "0x771602f7000001ffffffffff1234567890123456789012345678901234567890"
+decoded_command = Decoder.decode_command(command_hex)
+print(decoded_command)
+# Output:
+# Command: 0x771602f7 @ 0x1234567890123456789012345678901234567890
+# Call Type: DELEGATECALL
+# Inputs: [0, 1]
+# Output: None
+# Tuple Return: False
+# Extended: False
+
+# Decode an entire plan
+plan = planner.plan()
+decoded_plan = Decoder.decode_plan(plan["commands"], plan["state"])
+print(decoded_plan)
+# Output:
+# --- Weiroll Plan ---
+#
+# Commands: 2
+# State: 3 elements
+#
+# Command 0:
+# Command: 0x771602f7 @ 0x...
+# Call Type: DELEGATECALL
+# ...
+#
+# State Values:
+#   [0]: 0x...
+#   [1]: 0x...
+```
+
+This is useful for:
+- Debugging complex plans
+- Verifying command encoding/decoding
+- Inspecting plans before execution
+- Analyzing on-chain Weiroll transactions
+
 ## Best Practices
 
 1. **Gas Efficiency**:
