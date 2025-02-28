@@ -1,26 +1,33 @@
 import pytest
-from pathlib import Path
 from ethpm_types import ContractType
 from weiroll import Contract, Planner, CallType
 from weiroll.exceptions import InvalidContractError, EmptyABIError
 
 
-def test_ethpm_contract_adapter():
+# Skip test if ape is not installed
+try:
+    from ape import Contract as ApeContract
+    APE_AVAILABLE = True
+except ImportError:
+    APE_AVAILABLE = False
+
+pytestmark = pytest.mark.skipif(not APE_AVAILABLE, reason="ape is not installed")
+
+
+def test_ethpm_contract_adapter(ape_dai):
     """Test integration with ethpm_types ContractType."""
-    # Load a real ContractType from JSON
-    contract_type = ContractType.model_validate_json(
-        Path('tests/data/dai.abi.json').read_text())
+    # Get contract model data from the Ape contract
+    contract_type = ContractType.model_validate({"abi": ape_dai.contract_type.abi})
     
     # Get the ABI data directly
     model_data = contract_type.model_dump()
     abi_list = model_data['abi']
     
     # Create Weiroll contract directly with the ABI data
-    DAI_ADDRESS = "0x6B175474E89094C44Da98b954EedeAC495271d0F"
-    weiroll_contract = Contract(DAI_ADDRESS, abi_list)
+    weiroll_contract = Contract(str(ape_dai.address), abi_list)
     
     # Verify contract was properly created
-    assert weiroll_contract.address == DAI_ADDRESS
+    assert weiroll_contract.address.lower() == str(ape_dai.address).lower()
     assert len(weiroll_contract.functions) > 0
     assert "transfer" in weiroll_contract.functions
     assert "balanceOf" in weiroll_contract.functions
@@ -44,5 +51,5 @@ def test_ethpm_contract_adapter():
     assert "0xa9059cbb" in plan["commands"][0]
     
     # Test creating a library contract
-    library_contract = Contract(DAI_ADDRESS, abi_list, CallType.DELEGATECALL)
+    library_contract = Contract(str(ape_dai.address), abi_list, CallType.DELEGATECALL)
     assert library_contract.call_type == CallType.DELEGATECALL
