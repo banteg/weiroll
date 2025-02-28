@@ -1,8 +1,8 @@
-import pytest
 import textwrap
+
 import ape
 
-from weiroll import Decoder, Planner, Contract
+from weiroll import Contract, Planner
 
 # Define the expected output
 expected_output = textwrap.dedent("""
@@ -29,12 +29,8 @@ def test_vault_plan_tree_and_decoder_match():
     for a vault deposit and redeem example.
     """
     # Create the token and vault contracts
-    token = Contract.create_contract(
-        ape.Contract("0x6B175474E89094C44Da98b954EedeAC495271d0F")
-    )
-    vault = Contract.create_contract(
-        ape.Contract("0xd8063123BBA3B480569244AE66BFE72B6c84b00d")
-    )
+    token = Contract.create_contract(ape.Contract("0x6B175474E89094C44Da98b954EedeAC495271d0F"))
+    vault = Contract.create_contract(ape.Contract("0xd8063123BBA3B480569244AE66BFE72B6c84b00d"))
 
     # Set up the user address and amount
     user = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
@@ -47,19 +43,17 @@ def test_vault_plan_tree_and_decoder_match():
     planner.add(vault.redeem(shares, user, user))
 
     # Generate the plan
-    plan = planner.plan()
+    planner.plan()
 
     # Get the plan tree output
     tree_output = planner.show_tree()
-    
+
     # For debugging, print both outputs
     print("\nActual output:\n", tree_output)
     print("\nExpected output:\n", expected_output)
 
     # Compare with expected output
-    assert tree_output == expected_output, (
-        "Plan tree output doesn't match expected format."
-    )
+    assert tree_output == expected_output, "Plan tree output doesn't match expected format."
 
     # # Decode the plan
     # decoded_plan = Decoder.decode_plan(plan["commands"], plan["state"])

@@ -1,8 +1,4 @@
-import pytest
-from eth_abi import encode
-from eth_utils import function_signature_to_4byte_selector, to_bytes, to_hex
-
-from weiroll import Contract, Planner, StateValue, CallType, CommandArg
+from weiroll import Contract, Planner
 
 
 # Mock contract objects that will be wrapped
@@ -22,36 +18,31 @@ def test_tuple_rawvalue():
         {
             "inputs": [],
             "name": "returnsTuple",
-            "outputs": [
-                {"type": "uint256", "name": "a"},
-                {"type": "bytes32[]", "name": "b"}
-            ],
+            "outputs": [{"type": "uint256", "name": "a"}, {"type": "bytes32[]", "name": "b"}],
             "stateMutability": "pure",
-            "type": "function"
+            "type": "function",
         },
         {
-            "inputs": [
-                {"type": "bytes", "name": "raw"}
-            ],
+            "inputs": [{"type": "bytes", "name": "raw"}],
             "name": "acceptsBytes",
             "outputs": [],
             "stateMutability": "nonpayable",
-            "type": "function"
-        }
+            "type": "function",
+        },
     ]
-    
+
     mock_contract = MockContract(SAMPLE_ADDRESS, tuple_abi)
     test_contract = Contract.create_library(mock_contract)
-    
+
     # Create a plan with rawValue
     planner = Planner()
     # This would need to be implemented in our SDK
     # tuple_result = planner.add(test_contract.returnsTuple().raw_value())
     # planner.add(test_contract.acceptsBytes(tuple_result))
-    
+
     # For now just verify the basic case works
     planner.add(test_contract.returnsTuple())
     planner.add(test_contract.acceptsBytes(b"some_raw_data"))
-    
+
     plan = planner.plan()
     assert len(plan["commands"]) == 2

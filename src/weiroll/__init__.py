@@ -17,43 +17,40 @@ vault = Contract.create_contract(vault_contract)
 with Planner() as planner:
     # Approve tokens
     planner.add(token.approve(vault.address, amount))
-    
+
     # Deposit into vault
     planner.add(vault.deposit(amount))
-    
+
     # Generate the plan for execution
     plan = planner.plan()
 ```
 """
 
-from .constants import CallType, ArgType
 from .command import Command, CommandArg
+from .constants import ArgType, CallType
 from .contract import Contract, ContractFunction, FunctionCall, StateValue
+from .decoder import DecodedCommand, DecodedPlan, Decoder
+from .exceptions import EmptyABIError, InvalidContractError, WeirollError
 from .planner import Planner
-from .decoder import Decoder, DecodedCommand, DecodedPlan
-from .exceptions import WeirollError, InvalidContractError, EmptyABIError
 
 __all__ = [
-    # Main classes
-    "Contract",
-    "Planner",
-    "Decoder",
-    
-    # Core components
-    "ContractFunction",
-    "FunctionCall",
-    "StateValue",
-    "Command",
-    "CommandArg",
-    "DecodedCommand",
-    "DecodedPlan",
-    
+    "ArgType",
     # Enums and constants
     "CallType",
-    "ArgType",
-    
+    "Command",
+    "CommandArg",
+    # Main classes
+    "Contract",
+    # Core components
+    "ContractFunction",
+    "DecodedCommand",
+    "DecodedPlan",
+    "Decoder",
+    "EmptyABIError",
+    "FunctionCall",
+    "InvalidContractError",
+    "Planner",
+    "StateValue",
     # Exceptions
     "WeirollError",
-    "InvalidContractError",
-    "EmptyABIError",
 ]

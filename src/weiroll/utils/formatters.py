@@ -4,14 +4,13 @@ Value formatting utilities for Weiroll.
 This module provides formatting helpers for common Ethereum data types,
 particularly useful for displaying values in decoded plans.
 """
+
 from decimal import Decimal
-from typing import Optional, Dict, Any, Union
-from eth_utils import is_address, to_checksum_address, encode_hex
+
+from eth_utils import encode_hex, is_address, to_checksum_address
 
 
-def format_value(
-    hex_value: str | int | bytes, param_type: str | None = None
-) -> str:
+def format_value(hex_value: str | int | bytes, param_type: str | None = None) -> str:
     """
     Format a hex value based on its inferred type.
 
@@ -25,7 +24,7 @@ def format_value(
     match hex_value:
         case int() as val:
             if val >= 10**18:
-                return f'{Decimal(val) / 10**18} x 10^18'
+                return f"{Decimal(val) / 10**18} x 10^18"
             else:
                 return f"{val:,}"
 
