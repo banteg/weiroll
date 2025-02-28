@@ -273,29 +273,14 @@ class Decoder:
                         function_signature = f"{name}({','.join(input_types)})"
                         break
         
-        # 3. Fall back to common known selectors
+        # 3. Try to use 4byte.directory API or other signature sources
+        # We'll only implement this placeholder for now - future enhancement
         if not function_signature:
-            # Common Ethereum function signatures
-            common_signatures = {
-                "0x095ea7b3": "approve(address,uint256)",
-                "0xa9059cbb": "transfer(address,uint256)",
-                "0x23b872dd": "transferFrom(address,address,uint256)",
-                "0x70a08231": "balanceOf(address)",
-                "0xdd62ed3e": "allowance(address,address)",
-                "0x313ce567": "decimals()",
-                "0x06fdde03": "name()",
-                "0x95d89b41": "symbol()",
-                "0x18160ddd": "totalSupply()",
-                "0x6b62f89f": "deposit(uint256)",
-                "0x2e1a7d4d": "withdraw(uint256)",
-                "0xa694fc3a": "stake(uint256)",
-                "0xadc9772e": "withdraw(address,uint256)",
-                "0xd0e30db0": "deposit()",
-                "0x9dc29fac": "burn(address,uint256)",
-                "0xbd6d894d": "mint(address,uint256)",
-                "0x9b4e4634": "stake(bytes,bytes,bytes32)",
-            }
-            function_signature = common_signatures.get(fn_selector)
+            # Placeholder for possible future enhancement:
+            # - Query 4byte.directory API
+            # - Use local signature database
+            # - Check etherscan API
+            pass
         
         # Add the function info to the result if found in ABI
         if fn_info:
