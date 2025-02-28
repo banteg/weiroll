@@ -40,3 +40,11 @@ default_provider = "foundry"
 
 [tool.ape.node.ethereum.mainnet]
 url = "http://127.0.0.1:8545"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "I", "RUF"]
+ignore = ["E501", "B007", "B904"]
