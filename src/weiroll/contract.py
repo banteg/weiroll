@@ -5,6 +5,7 @@ from eth_utils import function_signature_to_4byte_selector, to_bytes, to_hex, to
 
 from .constants import CallType
 from .command import Command, CommandArg
+from .exceptions import InvalidContractError, EmptyABIError
 
 
 class ContractFunction:
@@ -92,10 +93,13 @@ class Contract:
     
     def __init__(self, address: str, abi: Optional[List[Dict[str, Any]]], call_type: CallType = CallType.CALL):
         if not is_address(address):
-            raise ValueError(f"Invalid address: {address}")
+            raise InvalidContractError(f"Invalid address: {address}")
         
+        if not abi:
+            raise EmptyABIError("Contract ABI cannot be empty or None")
+            
         self.address = to_checksum_address(address)
-        self.abi = abi or []  # Default to empty list if None
+        self.abi = abi
         self.functions: Dict[str, ContractFunction] = {}
         self.call_type = call_type
         
@@ -104,7 +108,7 @@ class Contract:
     def _process_abi(self):
         """Process the ABI to extract function signatures."""
         if not self.abi:
-            return  # Skip processing if ABI is empty
+            raise EmptyABIError("Contract ABI cannot be empty")
             
         for item in self.abi:
             if item.get('type') != 'function':
@@ -132,13 +136,19 @@ class Contract:
         Supports:
         - web3.py contracts (contract_obj.address, contract_obj.abi)
         - ape contracts (contract_obj.address, contract_obj.contract_type.abi)
+        
+        Raises:
+            InvalidContractError: If the contract object is invalid or unsupported
+            EmptyABIError: If the contract ABI is empty or None
         """
         if not hasattr(contract_obj, 'address'):
-            raise ValueError("Contract object must have an address attribute")
+            raise InvalidContractError("Contract object must have an address attribute")
             
         # Handle web3.py contracts
         if hasattr(contract_obj, 'abi'):
             if contract_obj.abi is not None:
+                if not contract_obj.abi:  # Empty list
+                    raise EmptyABIError("Contract ABI cannot be empty")
                 return Contract(contract_obj.address, contract_obj.abi, call_type)
         # Missing abi property or it's None - attempt ape style
         
@@ -147,6 +157,8 @@ class Contract:
             # Try to get ABI directly from the contract_type.abi property
             if hasattr(contract_obj.contract_type, 'abi'):
                 if contract_obj.contract_type.abi is not None:
+                    if not contract_obj.contract_type.abi:  # Empty list
+                        raise EmptyABIError("Contract ABI cannot be empty")
                     return Contract(contract_obj.address, contract_obj.contract_type.abi, call_type)
                 
             # Fallback to model_dump() pattern
@@ -155,12 +167,14 @@ class Contract:
                     # Get ABI from model_dump
                     model_data = contract_obj.contract_type.model_dump()
                     if isinstance(model_data, dict) and 'abi' in model_data and model_data['abi'] is not None:
+                        if not model_data['abi']:  # Empty list
+                            raise EmptyABIError("Contract ABI cannot be empty")
                         return Contract(contract_obj.address, model_data['abi'], call_type)
-                except Exception:
-                    # Error calling model_dump, continue to error
-                    pass
+                except Exception as e:
+                    # Error calling model_dump
+                    raise InvalidContractError(f"Error getting ABI from contract_type.model_dump(): {str(e)}")
         
-        raise ValueError("Unsupported contract object type. Must be a web3.py or ape contract.")
+        raise InvalidContractError("Unsupported contract object type. Must be a web3.py or ape contract.")
     
     @staticmethod
     def createLibrary(contract_obj: Any) -> 'Contract':
@@ -169,7 +183,11 @@ class Contract:
         
         Supports:
         - web3.py contracts (contract_obj.address, contract_obj.abi)
-        - ape contracts (contract_obj.address, contract_obj.contract_type.model_dump()['abi'])
+        - ape contracts (contract_obj.address, contract_obj.contract_type.abi)
+        
+        Raises:
+            InvalidContractError: If the contract object is invalid or unsupported
+            EmptyABIError: If the contract ABI is empty or None
         """
         return Contract.createContract(contract_obj, CallType.DELEGATECALL)
 

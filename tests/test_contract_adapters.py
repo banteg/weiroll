@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import MagicMock
 from weiroll import Contract, CallType
+from weiroll.exceptions import InvalidContractError, EmptyABIError
 
 
 def test_web3py_contract_adapter():
@@ -85,8 +86,8 @@ def test_unsupported_contract_type():
     
     unsupported_obj = UnsupportedContract()
     
-    # Should raise ValueError for missing both abi and contract_type
-    with pytest.raises(ValueError, match="Unsupported contract object type"):
+    # Should raise InvalidContractError for missing both abi and contract_type
+    with pytest.raises(InvalidContractError, match="Unsupported contract object type"):
         Contract.createContract(unsupported_obj)
         
     # Create a contract_type that doesn't have proper ABI access methods
@@ -100,6 +101,27 @@ def test_unsupported_contract_type():
     
     incomplete_obj = IncompleteContract()
     
-    # Should raise ValueError for unusable contract_type
-    with pytest.raises(ValueError, match="Unsupported contract object type"):
+    # Should raise InvalidContractError for unusable contract_type
+    with pytest.raises(InvalidContractError, match="Unsupported contract object type"):
         Contract.createContract(incomplete_obj)
+
+
+def test_empty_abi_error():
+    """Test that empty ABIs raise appropriate errors."""
+    # Create a contract with empty ABI
+    mock_contract = MagicMock()
+    mock_contract.address = "0x1234567890123456789012345678901234567890"
+    mock_contract.abi = []
+    
+    # Should raise EmptyABIError for empty ABI
+    with pytest.raises(EmptyABIError, match="Contract ABI cannot be empty"):
+        Contract.createContract(mock_contract)
+    
+    # Create a contract with None ABI
+    none_abi_contract = MagicMock()
+    none_abi_contract.address = "0x1234567890123456789012345678901234567890"
+    none_abi_contract.abi = None
+    
+    # Test init directly
+    with pytest.raises(EmptyABIError, match="Contract ABI cannot be empty or None"):
+        Contract(none_abi_contract.address, none_abi_contract.abi)

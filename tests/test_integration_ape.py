@@ -1,5 +1,6 @@
 import pytest
 from weiroll import Contract, Planner, CallType
+from weiroll.exceptions import InvalidContractError, EmptyABIError
 
 # We'll use ape's pytest plugin for testing
 try:
