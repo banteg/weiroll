@@ -252,27 +252,59 @@ class Planner:
             selector_hex = "0x" + cmd.function_selector.hex()
             
             # Try to extract the function name from the 4byte selector
-            # Common Ethereum function signatures
-            common_signatures = {
-                "0x095ea7b3": "approve(address,uint256)",
-                "0xa9059cbb": "transfer(address,uint256)",
-                "0x23b872dd": "transferFrom(address,address,uint256)",
-                "0x70a08231": "balanceOf(address)",
-                "0xdd62ed3e": "allowance(address,address)",
-                "0x313ce567": "decimals()",
-                "0x06fdde03": "name()",
-                "0x95d89b41": "symbol()",
-                "0x18160ddd": "totalSupply()",
-                "0x6b62f89f": "deposit(uint256)",
-                "0x2e1a7d4d": "withdraw(uint256)",
-                "0xa694fc3a": "stake(uint256)",
-                "0xadc9772e": "withdraw(address,uint256)",
-                "0xd0e30db0": "deposit()",
-                "0x9dc29fac": "burn(address,uint256)",
-                "0xbd6d894d": "mint(address,uint256)",
-            }
-            
-            fn_name = common_signatures.get(selector_hex, f"function({selector_hex})")
+            # First, check if there's a contract available
+            try:
+                # Try to look up with Contract class from ape (if available)
+                from ape import Contract as ApeContract
+                contract = ApeContract(target_address)
+                
+                # Try to get the signature from the contract's identifier_lookup
+                if hasattr(contract, 'identifier_lookup') and selector_hex in contract.identifier_lookup:
+                    fn_name = contract.identifier_lookup[selector_hex].signature
+                else:
+                    # Common Ethereum function signatures
+                    common_signatures = {
+                        "0x095ea7b3": "approve(address,uint256)",
+                        "0xa9059cbb": "transfer(address,uint256)",
+                        "0x23b872dd": "transferFrom(address,address,uint256)",
+                        "0x70a08231": "balanceOf(address)",
+                        "0xdd62ed3e": "allowance(address,address)",
+                        "0x313ce567": "decimals()",
+                        "0x06fdde03": "name()",
+                        "0x95d89b41": "symbol()",
+                        "0x18160ddd": "totalSupply()",
+                        "0x6b62f89f": "deposit(uint256)",
+                        "0x2e1a7d4d": "withdraw(uint256)",
+                        "0xa694fc3a": "stake(uint256)",
+                        "0xadc9772e": "withdraw(address,uint256)",
+                        "0xd0e30db0": "deposit()",
+                        "0x9dc29fac": "burn(address,uint256)",
+                        "0xbd6d894d": "mint(address,uint256)",
+                        "0x9b4e4634": "stake(bytes,bytes,bytes32)",
+                    }
+                    fn_name = common_signatures.get(selector_hex, f"function({selector_hex})")
+            except (ImportError, Exception):
+                # If ape is not available or there's an error, fall back to hardcoded signatures
+                common_signatures = {
+                    "0x095ea7b3": "approve(address,uint256)",
+                    "0xa9059cbb": "transfer(address,uint256)",
+                    "0x23b872dd": "transferFrom(address,address,uint256)",
+                    "0x70a08231": "balanceOf(address)",
+                    "0xdd62ed3e": "allowance(address,address)",
+                    "0x313ce567": "decimals()",
+                    "0x06fdde03": "name()",
+                    "0x95d89b41": "symbol()",
+                    "0x18160ddd": "totalSupply()",
+                    "0x6b62f89f": "deposit(uint256)",
+                    "0x2e1a7d4d": "withdraw(uint256)",
+                    "0xa694fc3a": "stake(uint256)",
+                    "0xadc9772e": "withdraw(address,uint256)",
+                    "0xd0e30db0": "deposit()",
+                    "0x9dc29fac": "burn(address,uint256)",
+                    "0xbd6d894d": "mint(address,uint256)",
+                    "0x9b4e4634": "stake(bytes,bytes,bytes32)",
+                }
+                fn_name = common_signatures.get(selector_hex, f"function({selector_hex})")
             
             # Format the command with its index
             line = [f"Command {i}: {fn_name} @ {target_address} [{cmd.call_type.name}]"]

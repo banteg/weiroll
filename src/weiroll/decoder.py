@@ -185,14 +185,16 @@ class Decoder:
     @staticmethod
     def decode_command_with_abi(
         command_data: Union[str, bytes], 
-        abi: List[Dict[str, Any]]
+        abi: List[Dict[str, Any]] = None,
+        contract_address: str = None
     ) -> Dict[str, Any]:
         """
         Decode a command with ABI information for enhanced readability.
         
         Args:
             command_data: The command data to decode (bytes32 or hex string)
-            abi: The ABI for the target contract
+            abi: The ABI for the target contract (optional if contract_address is provided)
+            contract_address: The contract address to look up (optional if abi is provided)
             
         Returns:
             dict: A dictionary with decoded command information
@@ -207,47 +209,108 @@ class Decoder:
             "output": decoded.output
         }
         
-        # Find the function in the ABI
+        # Use contract address from decoded command if not provided
+        if not contract_address:
+            contract_address = decoded.target
+        
+        # Find the function in the ABI using one of several approaches
         fn_selector = decoded.selector
         fn_info = None
+        function_signature = None
         
-        # Try to match the function by selector
-        for item in abi:
-            if item.get("type") != "function":
-                continue
+        # 1. Try to get the function signature from the contract's identifier_lookup
+        try:
+            from ape import Contract as ApeContract
+            if contract_address:
+                try:
+                    contract = ApeContract(contract_address)
+                    if hasattr(contract, 'identifier_lookup') and fn_selector in contract.identifier_lookup:
+                        identifier = contract.identifier_lookup[fn_selector]
+                        function_signature = identifier.signature
+                        function_selector = identifier.selector
+                        result["function"] = {
+                            "name": identifier.name,
+                            "signature": function_signature,
+                            "selector": function_selector
+                        }
+                        # If successful, we're done
+                        return result
+                except Exception as e:
+                    logger.debug(f"Error looking up function by identifier: {e}")
+        except ImportError:
+            pass  # Ape not available
+        
+        # 2. Try to find the function in the provided ABI
+        if abi:
+            # Try to match the function by selector
+            for item in abi:
+                if item.get("type") != "function":
+                    continue
+                    
+                name = item.get("name", "")
+                inputs = item.get("inputs", [])
                 
-            name = item.get("name", "")
-            inputs = item.get("inputs", [])
-            
-            # Skip if no name or no inputs section
-            if not name or inputs is None:
-                continue
-                
-            # Extract input types
-            input_types = []
-            for inp in inputs:
-                if isinstance(inp, dict) and "type" in inp:
-                    input_types.append(inp["type"])
+                # Skip if no name or no inputs section
+                if not name or inputs is None:
+                    continue
+                    
+                # Extract input types
+                input_types = []
+                for inp in inputs:
+                    if isinstance(inp, dict) and "type" in inp:
+                        input_types.append(inp["type"])
+                    else:
+                        # If input doesn't have a type, skip this function
+                        logger.warning(f"Skipping function {name} due to missing input type")
+                        break
                 else:
-                    # If input doesn't have a type, skip this function
-                    logger.warning(f"Skipping function {name} due to missing input type")
-                    break
-            else:
-                # Calculate selector for this function
-                calculated_selector = Decoder._get_selector_for_function(name, input_types)
-                
-                # If selectors match, we found the function
-                if calculated_selector == fn_selector:
-                    fn_info = item
-                    break
-                
-        # If we found the function, add its information to the result
+                    # Calculate selector for this function
+                    calculated_selector = Decoder._get_selector_for_function(name, input_types)
+                    
+                    # If selectors match, we found the function
+                    if calculated_selector == fn_selector:
+                        fn_info = item
+                        function_signature = f"{name}({','.join(input_types)})"
+                        break
+        
+        # 3. Fall back to common known selectors
+        if not function_signature:
+            # Common Ethereum function signatures
+            common_signatures = {
+                "0x095ea7b3": "approve(address,uint256)",
+                "0xa9059cbb": "transfer(address,uint256)",
+                "0x23b872dd": "transferFrom(address,address,uint256)",
+                "0x70a08231": "balanceOf(address)",
+                "0xdd62ed3e": "allowance(address,address)",
+                "0x313ce567": "decimals()",
+                "0x06fdde03": "name()",
+                "0x95d89b41": "symbol()",
+                "0x18160ddd": "totalSupply()",
+                "0x6b62f89f": "deposit(uint256)",
+                "0x2e1a7d4d": "withdraw(uint256)",
+                "0xa694fc3a": "stake(uint256)",
+                "0xadc9772e": "withdraw(address,uint256)",
+                "0xd0e30db0": "deposit()",
+                "0x9dc29fac": "burn(address,uint256)",
+                "0xbd6d894d": "mint(address,uint256)",
+                "0x9b4e4634": "stake(bytes,bytes,bytes32)",
+            }
+            function_signature = common_signatures.get(fn_selector)
+        
+        # Add the function info to the result if found in ABI
         if fn_info:
             result["function"] = {
                 "name": fn_info.get("name"),
-                "signature": f"{fn_info.get('name')}({','.join(inp.get('type', '') for inp in fn_info.get('inputs', []))})",
+                "signature": function_signature or f"{fn_info.get('name')}({','.join(inp.get('type', '') for inp in fn_info.get('inputs', []))})",
                 "inputs": fn_info.get("inputs"),
                 "outputs": fn_info.get("outputs")
+            }
+        # Add minimal function info if only signature is available
+        elif function_signature:
+            name = function_signature.split("(")[0]
+            result["function"] = {
+                "name": name,
+                "signature": function_signature
             }
             
         return result
