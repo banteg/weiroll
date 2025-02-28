@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import MagicMock
 from weiroll import Contract, CallType
 from weiroll.exceptions import InvalidContractError, EmptyABIError
+from dataclasses import dataclass
 
 
 def test_web3py_contract_adapter():
@@ -102,7 +103,7 @@ def test_unsupported_contract_type():
     incomplete_obj = IncompleteContract()
     
     # Should raise InvalidContractError for unusable contract_type
-    with pytest.raises(InvalidContractError, match="Unsupported contract object type"):
+    with pytest.raises(InvalidContractError, match="Could not get valid ABI from contract_type"):
         Contract.createContract(incomplete_obj)
 
 
