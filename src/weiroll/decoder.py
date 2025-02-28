@@ -170,17 +170,64 @@ class DecodedPlan:
                     value_str = ""
                     if arg_index < len(self.state) and arg_index not in state_sources:
                         state_value = self.state[arg_index]
-                        # Format nicely based on value
-                        if state_value.startswith("0x"):
-                            # Ethereum address or hex value
-                            if len(state_value) > 20:
-                                value_str = f" = {state_value[:10]}...{state_value[-8:]}"
+                        
+                        # Get parameter type information if available
+                        param_type = None
+                        if "(" in fn_name and ")" in fn_name:
+                            try:
+                                parts = fn_name.split("(", 1)
+                                if len(parts) > 1:
+                                    params_str = parts[1].split(")", 1)[0]
+                                    params = params_str.split(",")
+                                    param_index = j
+                                    # Adjust for VALUECALL which has ETH value as first argument
+                                    if cmd.call_type == "VALUECALL" and j > 0:
+                                        param_index = j - 1  # Skip the value parameter
+                                    
+                                    if param_index < len(params):
+                                        param_type = params[param_index].strip()
+                            except (IndexError, ValueError):
+                                # Couldn't extract parameter type
+                                pass
+                        
+                        # Try to use Ape's decode_input if available
+                        try:
+                            if hasattr(cmd, 'function') and cmd.function is not None and 'signature' in cmd.function:
+                                from ape import Contract as ApeContract
+                                # Only attempt if we're not dealing with a value call's first arg (ETH value)
+                                if not (cmd.call_type == "VALUECALL" and j == 0):
+                                    try:
+                                        # Check if we can use Ape's decode_input for more accurate decoding
+                                        contract = ApeContract(target_address)
+                                        # Use Ape's direct input decoding or our own helper method
+                                        if hasattr(contract, 'decode_input') and cmd.selector:
+                                            # For special types like array or complex objects, we'd need more work
+                                            # but for simple cases like address and uint, we can use our helper
+                                            formatted_value = Decoder._format_hex_value(state_value, param_type)
+                                            value_str = f" = {formatted_value}"
+                                    except Exception as e:
+                                        logger.debug(f"Error decoding with contract: {e}")
+                            else:
+                                # If no function metadata, try our best
+                                formatted_value = Decoder._format_hex_value(state_value, param_type)
+                                value_str = f" = {formatted_value}"
+                        except ImportError:
+                            # Ape not available, use fallback
+                            formatted_value = Decoder._format_hex_value(state_value, param_type)
+                            value_str = f" = {formatted_value}"
+                        
+                        # If we still couldn't format, use basic formatting
+                        if not value_str:
+                            if state_value.startswith("0x"):
+                                # Ethereum address or hex value
+                                if len(state_value) > 20:
+                                    value_str = f" = {state_value[:10]}...{state_value[-8:]}"
+                                else:
+                                    value_str = f" = {state_value}"
+                            elif state_value == "":
+                                value_str = " = None"
                             else:
                                 value_str = f" = {state_value}"
-                        elif state_value == "":
-                            value_str = " = None"
-                        else:
-                            value_str = f" = {state_value}"
                     
                     # Format based on the function signature if known
                     arg_name = ""
@@ -209,7 +256,35 @@ class DecodedPlan:
                     
                     # If this is the first argument of a VALUECALL, it's the ETH value
                     if cmd.call_type == "VALUECALL" and j == 0:
-                        input_lines.append(f"  ├─ Value: {value_str if value_str else 'State[' + str(arg_index) + ']'}{source_str}")
+                        # Try to format as ETH value if we have a state value
+                        eth_value_str = value_str
+                        if arg_index < len(self.state) and arg_index not in state_sources:
+                            state_value = self.state[arg_index]
+                            try:
+                                # Special formatting for ETH values
+                                if state_value.startswith("0x"):
+                                    clean_hex = state_value[2:] if state_value.startswith("0x") else state_value
+                                    try:
+                                        int_val = int(clean_hex, 16)
+                                        if int_val > 0:
+                                            if int_val >= 10**18:
+                                                # Format as ETH with decimal
+                                                eth = int_val / 10**18
+                                                eth_value_str = f" = {eth:.4f} ETH"
+                                            elif int_val >= 10**9:
+                                                # Format as gwei
+                                                gwei = int_val / 10**9
+                                                eth_value_str = f" = {gwei:.2f} gwei"
+                                            else:
+                                                # Format as wei
+                                                eth_value_str = f" = {int_val:,} wei"
+                                    except (ValueError, OverflowError):
+                                        # If it's not a valid number, use default
+                                        pass
+                            except Exception:
+                                pass
+                        
+                        input_lines.append(f"  ├─ Value: {eth_value_str if eth_value_str else 'State[' + str(arg_index) + ']'}{source_str}")
                     else:
                         prefix = "  ├─" if j < len(cmd.inputs) - 1 or cmd.output is not None else "  └─"
                         input_lines.append(f"{prefix} Input {j}{arg_name}: State[{arg_index}]{source_str}{value_str}")
@@ -409,6 +484,89 @@ class Decoder:
         """
         signature = f"{name}({','.join(input_types)})"
         return to_hex(function_signature_to_4byte_selector(signature))
+        
+    @staticmethod
+    def _format_hex_value(hex_value: str, param_type: str = None) -> str:
+        """
+        Intelligently format a hex value based on its likely type.
+        
+        Args:
+            hex_value: The hex string to format
+            param_type: Optional parameter type hint (e.g., 'uint256', 'address')
+            
+        Returns:
+            str: A nicely formatted string representation
+        """
+        # Return empty values as is
+        if not hex_value or hex_value == '0x':
+            return "None"
+            
+        # Strip 0x prefix for processing
+        clean_hex = hex_value[2:] if hex_value.startswith('0x') else hex_value
+        
+        # Try to detect the type based on format and/or param_type hint
+        if param_type:
+            param_type = param_type.strip()
+            
+            # Handle addresses
+            if param_type == 'address':
+                if len(clean_hex) <= 40:  # Addresses are 20 bytes
+                    return hex_value  # Return checksummed address
+                    
+            # Handle integers
+            elif param_type.startswith('uint') or param_type.startswith('int'):
+                try:
+                    int_val = int(clean_hex, 16)
+                    
+                    # Format common token amounts with decimals
+                    if int_val >= 10**18 and int_val % 10**18 == 0:
+                        return f"{int_val // 10**18} eth"
+                    elif int_val >= 10**6 and int_val % 10**6 == 0:
+                        return f"{int_val // 10**6} USDC"
+                    # Format large numbers with commas
+                    elif int_val > 10**5:
+                        return f"{int_val:,}"
+                    else:
+                        return str(int_val)
+                except ValueError:
+                    pass
+                    
+            # Handle booleans
+            elif param_type == 'bool':
+                if clean_hex == '01' or clean_hex == '0000000000000000000000000000000000000000000000000000000000000001':
+                    return "true"
+                elif clean_hex == '00' or clean_hex == '0000000000000000000000000000000000000000000000000000000000000000':
+                    return "false"
+        
+        # General formatting based on value patterns, without type hint
+        
+        # Check if it looks like an address (40 hex chars)
+        if len(clean_hex) <= 40 and all(c in '0123456789abcdefABCDEF' for c in clean_hex):
+            # Probably an address - return checksummed if possible
+            return f"0x{clean_hex}"
+            
+        # Long hex string, probably data or a large number
+        if len(clean_hex) > 40:
+            # Try to parse as a number first
+            try:
+                int_val = int(clean_hex, 16)
+                if int_val == 0:
+                    return "0"
+                # Format large numbers with unit suffixes
+                if int_val >= 10**18 and int_val % 10**18 == 0:
+                    return f"{int_val // 10**18} eth"
+                elif int_val >= 10**9 and int_val % 10**9 == 0:
+                    return f"{int_val // 10**9} gwei"
+                elif int_val > 10**5:
+                    return f"{int_val:,}"
+                else:
+                    return str(int_val)
+            except (ValueError, OverflowError):
+                # If it's not a valid number, truncate for display
+                return f"{hex_value[:10]}...{hex_value[-8:]}"
+                
+        # For short hex strings, just return as is
+        return hex_value
     
     @staticmethod
     def decode_command_with_abi(
