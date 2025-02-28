@@ -12,3 +12,11 @@ def ape_weth():
 @pytest.fixture
 def ape_uniswap():
     return ape.Contract("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
+
+@pytest.fixture
+def dev():
+    return ape.accounts.test_accounts[0]
+
+@pytest.fixture
+def recipient():
+    return ape.accounts.test_accounts[1]
