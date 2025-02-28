@@ -1,6 +1,6 @@
 from typing import Dict, List, Tuple, Any, Optional, Union, Set
 from eth_utils import to_checksum_address
-from .formatters import format_eth_value, format_hex_value
+from .formatters import format_value
 
 def render_tree(
     commands: List[Dict[str, Any]], 
@@ -107,7 +107,7 @@ def render_tree(
             if isinstance(input_val, int) and input_val < len(state):
                 # Regular state reference (from initial state)
                 state_val = state[input_val] if input_val < len(state) else None
-                formatted_val = format_hex_value(state_val)
+                formatted_val = format_value(state_val)
                 input_lines.append(f"{prefix} Input {j}{param_type}: State[{input_val}] = {formatted_val}")
             elif is_state_reference:
                 # Reference to previous command's output
