@@ -1,16 +1,33 @@
-from typing import Dict, List, Any, Optional, Tuple, Union
+from typing import Dict, List, Any, Optional, Tuple, Union, Literal
 from dataclasses import dataclass
+import logging
+from functools import lru_cache
 
 import eth_abi
-from eth_utils import to_hex, to_bytes, to_checksum_address
+from eth_utils import to_hex, to_bytes, to_checksum_address, function_signature_to_4byte_selector
 
 from .command import Command
 from .constants import CallType, ArgType
 
+# Set up logger
+logger = logging.getLogger("weiroll.decoder")
+
 
 @dataclass
 class DecodedCommand:
-    """Represents a decoded Weiroll command with human-readable information."""
+    """
+    Represents a decoded Weiroll command with human-readable information.
+    
+    Attributes:
+        selector: The 4-byte function selector as a hex string
+        target: The target contract address (checksummed)
+        call_type: Human-readable call type (CALL, DELEGATECALL, etc.)
+        inputs: List of state indices used as inputs
+        output: State index for the output value or None
+        is_tuple_return: Whether this call returns multiple values
+        is_extended: Whether this call has extended inputs
+        raw_command: The original command data
+    """
     selector: str
     target: str
     call_type: str
@@ -21,13 +38,7 @@ class DecodedCommand:
     raw_command: str
 
     def __str__(self) -> str:
-        call_types = {
-            CallType.DELEGATECALL: "DELEGATECALL",
-            CallType.CALL: "CALL",
-            CallType.STATICCALL: "STATICCALL",
-            CallType.VALUECALL: "VALUECALL"
-        }
-        
+        """Format the command for human-readable output."""
         return (
             f"Command: {self.selector} @ {self.target}\n"
             f"Call Type: {self.call_type}\n"
@@ -36,15 +47,26 @@ class DecodedCommand:
             f"Tuple Return: {self.is_tuple_return}\n"
             f"Extended: {self.is_extended}"
         )
+        
+    def __repr__(self) -> str:
+        """Provide a concise representation for debugging."""
+        return f"DecodedCommand(selector={self.selector}, target={self.target}, call_type={self.call_type})"
 
 
 @dataclass
 class DecodedPlan:
-    """Represents a full decoded Weiroll execution plan."""
+    """
+    Represents a full decoded Weiroll execution plan.
+    
+    Attributes:
+        commands: List of decoded commands
+        state: List of state values as hex strings
+    """
     commands: List[DecodedCommand]
     state: List[str]
     
     def __str__(self) -> str:
+        """Format the plan for human-readable output."""
         result = "--- Weiroll Plan ---\n\n"
         result += f"Commands: {len(self.commands)}\n"
         result += f"State: {len(self.state)} elements\n\n"
@@ -61,14 +83,34 @@ class DecodedPlan:
             result += f"  [{i}]: {display_value}\n"
         
         return result
+        
+    def __repr__(self) -> str:
+        """Provide a concise representation for debugging."""
+        return f"DecodedPlan(commands={len(self.commands)}, state_size={len(self.state)})"
 
 
 class Decoder:
-    """Decoder for Weiroll commands and plans."""
+    """
+    Decoder for Weiroll commands and plans.
+    
+    This class provides utilities to decode Weiroll commands and plans
+    into human-readable formats.
+    """
     
     @staticmethod
     def decode_command(command_data: Union[str, bytes]) -> DecodedCommand:
-        """Decode a command from bytes32 or hex string."""
+        """
+        Decode a command from bytes32 or hex string.
+        
+        Args:
+            command_data: The command data to decode (bytes32 or hex string)
+            
+        Returns:
+            DecodedCommand: A decoded command with human-readable information
+            
+        Raises:
+            ValueError: If the command data is invalid
+        """
         # Use the existing Command class to decode
         cmd = Command.decode(command_data)
         
@@ -95,8 +137,20 @@ class Decoder:
         )
     
     @staticmethod
-    def decode_plan(commands: List[Union[str, bytes]], state: List[str]) -> DecodedPlan:
-        """Decode a full Weiroll plan."""
+    def decode_plan(
+        commands: List[Union[str, bytes]], 
+        state: List[str]
+    ) -> DecodedPlan:
+        """
+        Decode a full Weiroll plan.
+        
+        Args:
+            commands: List of command data (bytes32 or hex strings)
+            state: List of state values
+            
+        Returns:
+            DecodedPlan: A decoded plan with human-readable information
+        """
         decoded_commands = [Decoder.decode_command(cmd) for cmd in commands]
         
         # Clean up state values for display
@@ -113,44 +167,85 @@ class Decoder:
         )
     
     @staticmethod
-    def decode_command_with_abi(command_data: Union[str, bytes], abi: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Decode a command with ABI information for enhanced readability."""
-        decoded = Decoder.decode_command(command_data)
+    @lru_cache(maxsize=128)
+    def _get_selector_for_function(name: str, input_types: List[str]) -> str:
+        """
+        Calculate a function selector from name and input types.
         
-        # TODO: Implement ABI-based decoding for function name and arguments
-        # This would require:
-        # 1. Finding the function in the ABI by selector
-        # 2. Parsing the state values according to function argument types
-        # 3. Returning human-readable function call information
+        Args:
+            name: Function name
+            input_types: List of input type strings
+            
+        Returns:
+            str: The 4-byte function selector as a hex string
+        """
+        signature = f"{name}({','.join(input_types)})"
+        return to_hex(function_signature_to_4byte_selector(signature))
+    
+    @staticmethod
+    def decode_command_with_abi(
+        command_data: Union[str, bytes], 
+        abi: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Decode a command with ABI information for enhanced readability.
+        
+        Args:
+            command_data: The command data to decode (bytes32 or hex string)
+            abi: The ABI for the target contract
+            
+        Returns:
+            dict: A dictionary with decoded command information
+        """
+        decoded = Decoder.decode_command(command_data)
         
         result = {
             "selector": decoded.selector,
             "target": decoded.target,
-            "call_type": decoded.call_type
+            "call_type": decoded.call_type,
+            "inputs": decoded.inputs,
+            "output": decoded.output
         }
         
         # Find the function in the ABI
         fn_selector = decoded.selector
         fn_info = None
+        
+        # Try to match the function by selector
         for item in abi:
             if item.get("type") != "function":
                 continue
                 
-            # Calculate selector for this function
-            # This is a simplification - a proper implementation would use eth_utils.function_signature_to_4byte_selector
             name = item.get("name", "")
             inputs = item.get("inputs", [])
-            input_types = [inp.get("type", "") for inp in inputs]
-            # Function selector calculation would go here
             
-            # For now, this is a placeholder
-            if name:
-                fn_info = item
-                break
+            # Skip if no name or no inputs section
+            if not name or inputs is None:
+                continue
                 
+            # Extract input types
+            input_types = []
+            for inp in inputs:
+                if isinstance(inp, dict) and "type" in inp:
+                    input_types.append(inp["type"])
+                else:
+                    # If input doesn't have a type, skip this function
+                    logger.warning(f"Skipping function {name} due to missing input type")
+                    break
+            else:
+                # Calculate selector for this function
+                calculated_selector = Decoder._get_selector_for_function(name, input_types)
+                
+                # If selectors match, we found the function
+                if calculated_selector == fn_selector:
+                    fn_info = item
+                    break
+                
+        # If we found the function, add its information to the result
         if fn_info:
             result["function"] = {
                 "name": fn_info.get("name"),
+                "signature": f"{fn_info.get('name')}({','.join(inp.get('type', '') for inp in fn_info.get('inputs', []))})",
                 "inputs": fn_info.get("inputs"),
                 "outputs": fn_info.get("outputs")
             }
