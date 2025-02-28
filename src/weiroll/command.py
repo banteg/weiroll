@@ -33,8 +33,8 @@ class Command:
     inputs: List[CommandArg]
     output: Optional[CommandArg] = None
     call_type: CallType = CallType.DELEGATECALL
-    is_tuple_return: bool = False
-    extended_inputs: bool = False
+    is_tuple_return: bool = False  # For raw value capture of return values
+    extended_inputs: bool = False  # For handling more than 6 arguments
 
     @property
     def flags(self) -> int:

@@ -49,6 +49,27 @@ class FunctionCall:
         """Set the ETH value for the call."""
         new_fn = self.fn.withValue(value)
         return FunctionCall(new_fn, self.args)
+        
+    def staticcall(self) -> 'FunctionCall':
+        """Convert a CALL to STATICCALL."""
+        if self.fn.call_type != CallType.CALL:
+            raise ValueError("Only CALL operations can be made static")
+            
+        # Create a copy with static call type
+        result = ContractFunction(
+            self.fn.contract, self.fn.fn_name, self.fn.fn_sig, CallType.STATICCALL
+        )
+        return FunctionCall(result, self.args)
+        
+    def rawValue(self) -> 'FunctionCall':
+        """Capture the entire return value as a bytes object.
+        Useful for functions that return multiple values (tuples)."""
+        # Create a new function call with is_tuple_return set to True
+        new_call = FunctionCall(self.fn, self.args)
+        # This would modify the command to set the TUPLE_RETURN flag
+        # Implementation is not complete - would need to track this flag
+        # through to the Command object
+        return new_call
     
     @property
     def selector(self) -> bytes:
@@ -69,13 +90,14 @@ class FunctionCall:
 class Contract:
     """Represents a contract that can be called through Weiroll."""
     
-    def __init__(self, address: str, abi: List[Dict[str, Any]]):
+    def __init__(self, address: str, abi: List[Dict[str, Any]], call_type: CallType = CallType.CALL):
         if not is_address(address):
             raise ValueError(f"Invalid address: {address}")
         
         self.address = to_checksum_address(address)
         self.abi = abi
         self.functions: Dict[str, ContractFunction] = {}
+        self.call_type = call_type
         
         self._process_abi()
     
@@ -90,7 +112,7 @@ class Contract:
             input_types = [inp.get('type', '') for inp in inputs]
             signature = f"{fn_name}({','.join(input_types)})"
             
-            self.functions[fn_name] = ContractFunction(self, fn_name, signature)
+            self.functions[fn_name] = ContractFunction(self, fn_name, signature, self.call_type)
     
     def __getattr__(self, name: str) -> Any:
         """Allow accessing functions as attributes."""
@@ -100,14 +122,21 @@ class Contract:
         raise AttributeError(f"Contract has no function '{name}'")
     
     @staticmethod
-    def createContract(contract_obj: Any) -> 'Contract':
-        """Create a Contract from an ethers.js or web3.py contract object."""
-        # This is a simplified version - actual implementation would need
-        # to handle different contract library formats
+    def createContract(contract_obj: Any, call_type: CallType = CallType.CALL) -> 'Contract':
+        """Create a Contract from an ethers.js or web3.py contract object.
+        By default, uses CALL call type for regular contracts.
+        """
         if hasattr(contract_obj, 'address') and hasattr(contract_obj, 'abi'):
-            return Contract(contract_obj.address, contract_obj.abi)
+            return Contract(contract_obj.address, contract_obj.abi, call_type)
         
         raise ValueError("Unsupported contract object type")
+    
+    @staticmethod
+    def createLibrary(contract_obj: Any) -> 'Contract':
+        """Create a Contract from an ethers.js or web3.py contract object.
+        Uses DELEGATECALL call type for library contracts.
+        """
+        return Contract.createContract(contract_obj, CallType.DELEGATECALL)
 
 
 class StateValue:

@@ -18,6 +18,12 @@ class Planner:
     
     def _add_to_state(self, value: Any, is_dynamic: bool = False) -> int:
         """Add a value to the state and return its index."""
+        # Check if the value already exists in the state
+        # This implements literal deduplication
+        for i, existing_value in enumerate(self.state):
+            if existing_value == value:
+                return i
+                
         state_index = self.next_state_index
         self.state.append(value)
         self.next_state_index += 1
