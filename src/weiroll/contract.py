@@ -111,15 +111,30 @@ class Contract:
             raise EmptyABIError("Contract ABI cannot be empty")
             
         for item in self.abi:
-            if item.get('type') != 'function':
+            try:
+                # For dictionary-style ABI entries (both web3.py and model_dump() results)
+                if isinstance(item, dict):
+                    # Skip non-function items
+                    if item.get('type') != 'function':
+                        continue
+                    
+                    fn_name = item.get('name', '')
+                    inputs = item.get('inputs', [])
+                    
+                    # Process input types
+                    input_types = []
+                    for inp in inputs:
+                        if isinstance(inp, dict) and 'type' in inp:
+                            input_types.append(inp['type'])
+                        else:
+                            input_types.append('')
+                    
+                    # Create the function signature and add to functions dict
+                    signature = f"{fn_name}({','.join(input_types)})"
+                    self.functions[fn_name] = ContractFunction(self, fn_name, signature, self.call_type)
+            except Exception as e:
+                # Skip problematic ABI items - let's be tolerant of unusual formats
                 continue
-            
-            fn_name = item.get('name', '')
-            inputs = item.get('inputs', [])
-            input_types = [inp.get('type', '') for inp in inputs]
-            signature = f"{fn_name}({','.join(input_types)})"
-            
-            self.functions[fn_name] = ContractFunction(self, fn_name, signature, self.call_type)
     
     def __getattr__(self, name: str) -> Any:
         """Allow accessing functions as attributes."""
@@ -154,14 +169,7 @@ class Contract:
         
         # Handle ape contracts
         if hasattr(contract_obj, 'contract_type'):
-            # Try to get ABI directly from the contract_type.abi property
-            if hasattr(contract_obj.contract_type, 'abi'):
-                if contract_obj.contract_type.abi is not None:
-                    if not contract_obj.contract_type.abi:  # Empty list
-                        raise EmptyABIError("Contract ABI cannot be empty")
-                    return Contract(contract_obj.address, contract_obj.contract_type.abi, call_type)
-                
-            # Fallback to model_dump() pattern
+            # Prioritize model_dump() pattern first since it handles ethpm_types correctly
             if hasattr(contract_obj.contract_type, 'model_dump'):
                 try:
                     # Get ABI from model_dump
@@ -171,8 +179,18 @@ class Contract:
                             raise EmptyABIError("Contract ABI cannot be empty")
                         return Contract(contract_obj.address, model_data['abi'], call_type)
                 except Exception as e:
-                    # Error calling model_dump
-                    raise InvalidContractError(f"Error getting ABI from contract_type.model_dump(): {str(e)}")
+                    # Error calling model_dump - don't raise yet, try the direct abi attribute
+                    pass
+                    
+            # Fallback to direct abi property if model_dump failed
+            if hasattr(contract_obj.contract_type, 'abi'):
+                if contract_obj.contract_type.abi is not None:
+                    if not contract_obj.contract_type.abi:  # Empty list
+                        raise EmptyABIError("Contract ABI cannot be empty")
+                    return Contract(contract_obj.address, contract_obj.contract_type.abi, call_type)
+            
+            # If we got here, neither method worked
+            raise InvalidContractError("Could not get valid ABI from contract_type")
         
         raise InvalidContractError("Unsupported contract object type. Must be a web3.py or ape contract.")
     
