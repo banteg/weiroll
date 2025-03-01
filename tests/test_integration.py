@@ -1,34 +1,10 @@
 from weiroll import Contract, Planner
 
 
-# Mock contract objects that will be wrapped
-class MockContract:
-    def __init__(self, address, abi):
-        self.address = address
-        self.abi = abi
-
-
-def test_simple_addition():
+def test_simple_addition(math_contract, events_contract):
     """Test a simple addition program similar to JavaScript tests."""
-    # Create mock contract with Math library
-    math_addr = "0x1234567890123456789012345678901234567890"
-    math_abi = [
-        {
-            "type": "function",
-            "name": "add",
-            "inputs": [{"type": "uint256"}, {"type": "uint256"}],
-            "outputs": [{"type": "uint256"}],
-        }
-    ]
-
-    events_addr = "0x2345678901234567890123456789012345678901"
-    events_abi = [{"type": "function", "name": "logUint", "inputs": [{"type": "uint256"}], "outputs": []}]
-
     # Create Contract instances
-    math_contract = MockContract(math_addr, math_abi)
     math = Contract(math_contract)
-
-    events_contract = MockContract(events_addr, events_abi)
     events = Contract(events_contract)
 
     # Create a Planner
@@ -57,31 +33,10 @@ def test_simple_addition():
     # The final b value should be 55
 
 
-def test_string_operations():
+def test_string_operations(strings_contract, events_contract):
     """Test string operations similar to JavaScript tests."""
-    # Create mock contract with Strings library
-    strings_addr = "0x1234567890123456789012345678901234567890"
-    strings_abi = [
-        {
-            "type": "function",
-            "name": "strcat",
-            "inputs": [{"type": "string"}, {"type": "string"}],
-            "outputs": [{"type": "string"}],
-        },
-        {"type": "function", "name": "strlen", "inputs": [{"type": "string"}], "outputs": [{"type": "uint256"}]},
-    ]
-
-    events_addr = "0x2345678901234567890123456789012345678901"
-    events_abi = [
-        {"type": "function", "name": "logString", "inputs": [{"type": "string"}], "outputs": []},
-        {"type": "function", "name": "logUint", "inputs": [{"type": "uint256"}], "outputs": []},
-    ]
-
     # Create Contract instances
-    strings_contract = MockContract(strings_addr, strings_abi)
     strings = Contract(strings_contract)
-
-    events_contract = MockContract(events_addr, events_abi)
     events = Contract(events_contract)
 
     # Create a Planner for concatenation
@@ -110,22 +65,10 @@ def test_string_operations():
     assert len(strlen_plan["commands"]) == 2
 
 
-def test_value_call():
+def test_value_call(payable_contract, events_contract):
     """Test payable function calls with value."""
-    payable_addr = "0x3456789012345678901234567890123456789012"
-    payable_abi = [
-        {"type": "function", "name": "pay", "inputs": [], "outputs": [], "stateMutability": "payable"},
-        {"type": "function", "name": "balance", "inputs": [], "outputs": [{"type": "uint256"}]},
-    ]
-
-    events_addr = "0x2345678901234567890123456789012345678901"
-    events_abi = [{"type": "function", "name": "logUint", "inputs": [{"type": "uint256"}], "outputs": []}]
-
     # Create Contract instances
-    payable_contract = MockContract(payable_addr, payable_abi)
     payable = Contract(payable_contract)
-
-    events_contract = MockContract(events_addr, events_abi)
     events = Contract(events_contract)
 
     # Create a Planner

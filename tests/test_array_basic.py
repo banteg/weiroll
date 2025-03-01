@@ -1,35 +1,10 @@
 from weiroll import Contract, Planner
 
 
-class MockContract:
-    def __init__(self, address, abi):
-        self.address = address
-        self.abi = abi
-
-
-def test_array_in_planner():
+def test_array_in_planner(array_test_contract):
     """Test to investigate array handling in the Planner"""
-    # Create a contract with a function that accepts an array
-    address = "0x1234567890123456789012345678901234567890"
-    abi = [
-        {
-            "type": "function",
-            "name": "swapExactTokensForTokens",
-            "inputs": [
-                {"name": "amountIn", "type": "uint256"},
-                {"name": "amountOutMin", "type": "uint256"},
-                {"name": "path", "type": "address[]"},  # Array of addresses
-                {"name": "to", "type": "address"},
-                {"name": "deadline", "type": "uint256"},
-            ],
-            "outputs": [{"name": "amounts", "type": "uint256[]"}],
-            "stateMutability": "nonpayable",
-        }
-    ]
-
     # Create contract instance
-    mock_contract = MockContract(address, abi)
-    contract = Contract(mock_contract)
+    contract = Contract(array_test_contract)
 
     # Create planner
     planner = Planner()

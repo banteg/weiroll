@@ -5,27 +5,9 @@ from weiroll.contract import Contract, StateValue
 from weiroll.planner import Planner
 
 
-class MockContract:
-    def __init__(self, address, abi):
-        self.address = address
-        self.abi = abi
-
-
-def test_planner_basic():
-    # Create a simplified contract with a basic function
-    address = "0x1234567890123456789012345678901234567890"
-    abi = [
-        {
-            "type": "function",
-            "name": "add",
-            "inputs": [{"type": "uint256"}, {"type": "uint256"}],
-            "outputs": [{"type": "uint256"}],
-        }
-    ]
-
+def test_planner_basic(simple_contract):
     # Create a Contract instance
-    mock_contract = MockContract(address, abi)
-    contract = Contract(mock_contract)
+    contract = Contract(simple_contract)
 
     # Create a Planner
     planner = Planner()
@@ -42,7 +24,7 @@ def test_planner_basic():
     assert len(planner.commands) == 1
     cmd = planner.commands[0]
     assert cmd.function_selector == function_signature_to_4byte_selector("add(uint256,uint256)")
-    assert cmd.target == to_bytes(hexstr=address)
+    assert cmd.target == to_bytes(hexstr=simple_contract.address)
     assert len(cmd.inputs) == 2
     assert cmd.inputs[0].index == 0
     assert cmd.inputs[1].index == 1
@@ -63,27 +45,9 @@ def test_planner_basic():
     assert plan["state"][2] == "0x"  # Empty placeholder for output
 
 
-def test_planner_chained_operations():
-    # Create a simplified contract with multiple functions
-    address = "0x1234567890123456789012345678901234567890"
-    abi = [
-        {
-            "type": "function",
-            "name": "add",
-            "inputs": [{"type": "uint256"}, {"type": "uint256"}],
-            "outputs": [{"type": "uint256"}],
-        },
-        {
-            "type": "function",
-            "name": "multiply",
-            "inputs": [{"type": "uint256"}, {"type": "uint256"}],
-            "outputs": [{"type": "uint256"}],
-        },
-    ]
-
+def test_planner_chained_operations(multi_function_contract):
     # Create a Contract instance
-    mock_contract = MockContract(address, abi)
-    contract = Contract(mock_contract)
+    contract = Contract(multi_function_contract)
 
     # Create a Planner
     planner = Planner()
@@ -104,14 +68,9 @@ def test_planner_chained_operations():
     assert len(plan["state"]) == 5  # 3 inputs + 2 outputs
 
 
-def test_planner_with_value_call():
-    # Create a simplified contract with a payable function
-    address = "0x1234567890123456789012345678901234567890"
-    abi = [{"type": "function", "name": "deposit", "inputs": [], "outputs": [], "stateMutability": "payable"}]
-
+def test_planner_with_value_call(deposit_contract):
     # Create a Contract instance
-    mock_contract = MockContract(address, abi)
-    contract = Contract(mock_contract)
+    contract = Contract(deposit_contract)
 
     # Get the deposit function and set it to use CALL
     deposit_fn = contract.deposit
