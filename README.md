@@ -1,16 +1,71 @@
 # Weiroll
 
-Weiroll is a simple and efficient operation-chaining/scripting language for the EVM.
+Weiroll is a language for writing programs that take advantage of the EVM's unique capabilities, allowing for efficient execution of multiple operations in a single transaction.
 
-## Overview
+The Python SDK provides a simple and efficient way to create operation chains, build complex DeFi strategies, and execute them on-chain.
 
-The input to the Weiroll VM is an array of commands and an array of state variables. The Weiroll VM executes the list of commands from start to finish. There is no built-in branching or looping, though these can be added externally.
+## Features
 
-State elements are `bytes` values of arbitrary length. The VM supports up to 127 state elements.
+- **Contract Integration**: Seamless integration with Ape contracts
+- **Command Execution**: Create and execute sequences of contract calls
+- **Plan Visualization**: Display plans as dependency trees with detailed formatting
+- **Plan Decoding**: Decode encoded plans with enhanced visualization
+- **Plan Reconstruction**: Recreate Planner objects from decoded plans
+- **Value Formatting**: Format large numbers and token amounts for readability
 
-Commands are `bytes32` values that encode a single operation for the VM to take. Each operation consists of taking zero or more state elements and using them to call (via `delegatecall`) a smart contract function specified in the command. The return value(s) of the function are then unpacked back into the state.
+## Installation
 
-This simple architecture makes it possible for the output of one operation to be used as an input to any other, as well as allowing static values to be supplied by specifying them as part of the initial state.
+```bash
+pip install weiroll  # FIXME package name tbd
+# or
+uv add weiroll
+```
+
+## Quick Start
+
+```python
+from weiroll import Contract, Planner
+from ape import Contract as ApeContract
+
+# Create contract wrappers
+token = Contract(ApeContract("0x6B175474E89094C44Da98b954EedeAC495271d0F"))
+vault = Contract(ApeContract("0xd8063123BBA3B480569244AE66BFE72B6c84b00d"))
+
+# Create a plan
+with Planner() as planner:
+    # Create a sequence of operations with data dependencies
+    balance = planner.add(token.balanceOf("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"))
+    shares = planner.add(vault.deposit(balance, "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"))
+    planner.add(vault.redeem(shares, "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"))
+    
+    # Display the plan as a tree
+    print(planner.show_tree())
+    
+    # Generate the encoded plan for execution
+    plan = planner.plan()
+```
+
+Here is an example tree visualization:
+```
+Command 0: balanceOf(address holder) -> uint256 @ 0x6B175474E89094C44Da98b954EedeAC495271d0F [CALL]
+  ├─ Input 0: State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+  └─ Output: State[1] (→ Command 1)
+
+Command 1: deposit(uint256 assets, address receiver) -> uint256 @ 0xd8063123BBA3B480569244AE66BFE72B6c84b00d [CALL]
+  ├─ Input 0: State[1] (from Command 0 output)
+  ├─ Input 1: State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+  └─ Output: State[2] (→ Command 2)
+
+Command 2: redeem(uint256 shares, address receiver, address owner) -> uint256 @ 0xd8063123BBA3B480569244AE66BFE72B6c84b00d [CALL]
+  ├─ Input 0: State[2] (from Command 1 output)
+  ├─ Input 1: State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+  ├─ Input 2: State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+  └─ Output: State[3] (unused)
+```
+
+## Overview of the VM
+
+Under the hood, the Weiroll VM executes a list of commands from start to finish. Each command is encoded as a `bytes32` value that represents a single operation for the VM to perform.
 
 ## Command structure
 
