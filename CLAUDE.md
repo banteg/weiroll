@@ -11,16 +11,20 @@ The Python SDK provides bindings to interact with the Weiroll VM. It allows crea
 - **Command Execution:** Create and execute sequences of contract calls
 - **Plan Visualization:** Display plans as trees with `planner.show_tree()`
 - **Plan Decoding:** Decode encoded plans with enhanced visualization using `Decoder`
+- **Plan Reconstruction:** Recreate Planner objects from decoded plans
 - **Value Formatting:** Format large numbers and token amounts for readability
+- **Command Dependencies:** Visualize data flow between commands
 
 ### Build Commands
 - Run Python tests: `uv run pytest tests/`
 - Run single test: `uv run pytest tests/test_file.py::test_name -v`
+- Run linting: `uv run ruff check .`
+- Format code: `uv run ruff format .`
 
 ### Contract Adapters
 Weiroll provides adapters for different contract interfaces:
 
-2. **Ape contracts**:
+1. **Ape contracts**:
    ```python
    from ape import Contract as ApeContract
    from weiroll import Contract
@@ -29,13 +33,13 @@ Weiroll provides adapters for different contract interfaces:
    contract = Contract(ape_contract)
    ```
 
-3. **Direct ABI**:
+2. **Direct ABI**:
    ```python
    from weiroll import Contract
    contract = Contract(address, abi_list)
    ```
 
-4. **With ethpm_types**:
+3. **With ethpm_types**:
    ```python
    from ethpm_types import ContractType
    contract_type = ContractType.model_validate_json(json_text)
@@ -61,7 +65,19 @@ detailed_cmd = Decoder.decode_command_with_abi(
     command_data,
     contract_address="0x1234..."
 )
+
+# Convert a decoded plan back to a Planner
+reconstructed_planner = Decoder.to_planner(decoded_plan)
+
+# Create a new plan from the reconstructed planner
+new_plan = reconstructed_planner.plan()
 ```
+
+The decoder provides detailed visualization showing:
+- Command function signatures with parameter types
+- Command dependencies and data flow between commands
+- State values formatted for readability
+- Source commands for each state value used as input
 
 Value formatting will automatically:
 - Format token amounts with 18 decimals as "N × 10^18"
@@ -117,6 +133,16 @@ decoded_plan = Decoder.decode_plan(plan["commands"], plan["state"])
 # Display the plan in tree format (same as planner.show_tree())
 print(decoded_plan)
 
+# Example output:
+# Command 0: balanceOf(address holder) -> uint256 @ 0x6B17547... [CALL]
+#   ├─ Input 0: State[0] = 0xd8dA6BF2...
+#   └─ Output: State[1] (→ Command 1)
+#
+# Command 1: deposit(uint256 assets, address receiver) -> uint256 @ 0xd8063... [CALL]
+#   ├─ Input 0: State[1] (from Command 0 output)
+#   ├─ Input 1: State[0] = 0xd8dA6BF2...
+#   └─ Output: State[2] (→ Command 2)
+
 # Optionally reconstruct a Planner from the decoded plan
 reconstructed_planner = Decoder.to_planner(decoded_plan)
 ```
@@ -155,12 +181,18 @@ planner.add(
 
 ### Testing
 - **Commands**: 
-  - Run all tests: `uv run ape test`
-  - Run specific tests: `uv run ape test tests/test_file.py -v`
+  - Run all tests: `uv run pytest tests/`
+  - Run specific tests: `uv run pytest tests/test_file.py::test_name -v`
+  - Run with increased verbosity: `uv run pytest -vv`
+- **Linting and Formatting**:
+  - Check code style: `uv run ruff check .`
+  - Fix code style issues: `uv run ruff check --fix .`
+  - Format code: `uv run ruff format .`
 - **Test framework:** pytest with Ape's testing plugin
 - **Fixtures:** Common contracts and accounts available in conftest.py
 - **Integration tests:** Tests for both web3.py and ape contracts
 - **Live contracts:** Tests use real mainnet contracts via forking
+- **Test patterns:** Test files follow the format `test_*.py` with functions named `test_*`
 
 ## Solidity (Contract Development)
 
