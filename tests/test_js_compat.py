@@ -2,65 +2,12 @@ import pytest
 
 from weiroll import CallType, Contract, Planner
 
-
-# Mock contract objects that will be wrapped
-class MockContract:
-    def __init__(self, address, abi):
-        self.address = address
-        self.abi = abi
-
-
 SAMPLE_ADDRESS = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 
 
-def get_math_contract():
-    # Create mock contract with Math library
-    math_abi = [
-        {
-            "inputs": [
-                {"internalType": "uint256", "name": "a", "type": "uint256"},
-                {"internalType": "uint256", "name": "b", "type": "uint256"},
-            ],
-            "name": "add",
-            "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
-            "stateMutability": "pure",
-            "type": "function",
-        }
-    ]
-
-    math_contract = MockContract(SAMPLE_ADDRESS, math_abi)
-    return Contract(math_contract)
-
-
-def get_strings_contract():
-    # Create mock contract with Strings library
-    strings_abi = [
-        {
-            "inputs": [
-                {"internalType": "string", "name": "a", "type": "string"},
-                {"internalType": "string", "name": "b", "type": "string"},
-            ],
-            "name": "strcat",
-            "outputs": [{"internalType": "string", "name": "", "type": "string"}],
-            "stateMutability": "pure",
-            "type": "function",
-        },
-        {
-            "inputs": [{"internalType": "string", "name": "x", "type": "string"}],
-            "name": "strlen",
-            "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
-            "stateMutability": "pure",
-            "type": "function",
-        },
-    ]
-
-    strings_contract = MockContract(SAMPLE_ADDRESS, strings_abi)
-    return Contract(strings_contract)
-
-
-def test_simple_program():
+def test_simple_program(math_contract):
     """Test planning a simple program."""
-    math = get_math_contract()
+    math = Contract(math_contract)
 
     planner = Planner()
     planner.add(math.add(1, 2))
@@ -74,9 +21,9 @@ def test_simple_program():
     assert plan["state"][1].startswith("0x")  # 2 encoded as uint256
 
 
-def test_deduplicate_literals():
+def test_deduplicate_literals(math_contract):
     """Test deduplication of identical literals."""
-    math = get_math_contract()
+    math = Contract(math_contract)
 
     planner = Planner()
     planner.add(math.add(1, 1))
@@ -88,9 +35,9 @@ def test_deduplicate_literals():
     assert plan["state"][0].startswith("0x")
 
 
-def test_reuse_return_values():
+def test_reuse_return_values(math_contract):
     """Test planning a program that uses return values."""
-    math = get_math_contract()
+    math = Contract(math_contract)
 
     planner = Planner()
     sum1 = planner.add(math.add(1, 2))
@@ -104,9 +51,9 @@ def test_reuse_return_values():
     assert len(plan["state"]) >= 3
 
 
-def test_dynamic_arguments():
+def test_dynamic_arguments(strings_contract):
     """Test planning a program with dynamic arguments."""
-    strings = get_strings_contract()
+    strings = Contract(strings_contract)
 
     planner = Planner()
     planner.add(strings.strlen("Hello, world!"))
@@ -117,9 +64,9 @@ def test_dynamic_arguments():
     assert len(plan["state"]) > 0
 
 
-def test_dynamic_return_values():
+def test_dynamic_return_values(strings_contract):
     """Test planning a program with dynamic return value."""
-    strings = get_strings_contract()
+    strings = Contract(strings_contract)
 
     planner = Planner()
     planner.add(strings.strcat("Hello, ", "world!"))
@@ -130,9 +77,9 @@ def test_dynamic_return_values():
     assert len(plan["state"]) >= 2  # At least two string inputs
 
 
-def test_dynamic_return_as_input():
+def test_dynamic_return_as_input(strings_contract):
     """Test planning a program that takes dynamic argument from a return value."""
-    strings = get_strings_contract()
+    strings = Contract(strings_contract)
 
     planner = Planner()
     str_result = planner.add(strings.strcat("Hello, ", "world!"))
@@ -144,25 +91,14 @@ def test_dynamic_return_as_input():
     assert len(plan["state"]) >= 2  # At least two input strings
 
 
-def test_call_types():
+def test_call_types(math_contract):
     """Test different call types."""
     # Create standard CALL contract
-    call_math = get_math_contract()
+    call_math = Contract(math_contract)
     assert call_math.add(1, 2).call_type == CallType.CALL
 
     # Create a DELEGATECALL library contract
-    delegatecall_abi = [
-        {
-            "inputs": [{"type": "uint256"}, {"type": "uint256"}],
-            "name": "add",
-            "outputs": [{"type": "uint256"}],
-            "stateMutability": "pure",
-            "type": "function",
-        }
-    ]
-
-    mock_library = MockContract(SAMPLE_ADDRESS, delegatecall_abi)
-    delegatecall_math = Contract(mock_library, call_type=CallType.DELEGATECALL)
+    delegatecall_math = Contract(math_contract, call_type=CallType.DELEGATECALL)
     assert delegatecall_math.add(1, 2).call_type == CallType.DELEGATECALL
 
     # Test STATICCALL via .staticcall()
@@ -174,34 +110,22 @@ def test_call_types():
         delegatecall_math.add(1, 2).staticcall()
 
 
-def test_value_calls():
+def test_value_calls(deposit_contract, math_contract):
     """Test calls with ETH value."""
-    # Create a payable function contract
-    payable_abi = [
-        {
-            "inputs": [{"type": "uint256"}],
-            "name": "deposit",
-            "outputs": [],
-            "stateMutability": "payable",
-            "type": "function",
-        }
-    ]
-
-    mock_contract = MockContract(SAMPLE_ADDRESS, payable_abi)
-    payable_contract = Contract(mock_contract)
+    payable_contract = Contract(deposit_contract)
 
     # Test withValue call
-    value_call = payable_contract.deposit(123).with_value(456)
+    value_call = payable_contract.deposit().with_value(456)
     assert value_call.call_type == CallType.VALUECALL
 
     # Test the plan with value calls
     planner = Planner()
-    planner.add(payable_contract.deposit(123).with_value(456))
+    planner.add(payable_contract.deposit().with_value(456))
     plan = planner.plan()
     assert len(plan["commands"]) == 1
 
     # Test that return values as parameters work correctly
-    math = get_math_contract()
+    math = Contract(math_contract)
     planner2 = Planner()
     sum_result = planner2.add(math.add(1, 2))
     planner2.add(math.add(sum_result, 3))

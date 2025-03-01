@@ -1,48 +1,22 @@
 from weiroll import Contract, Planner, CallType
 
-
-# Mock contract objects that will be wrapped
-class MockContract:
-    def __init__(self, address, abi):
-        self.address = address
-        self.abi = abi
-
-
 SAMPLE_ADDRESS = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 
 
-def test_tuple_rawvalue():
+def test_tuple_rawvalue(multi_return_contract):
     """Test capturing a tuple return value as raw bytes."""
-    # Create mock contract with a function that returns a tuple
-    tuple_abi = [
-        {
-            "inputs": [],
-            "name": "returnsTuple",
-            "outputs": [{"type": "uint256", "name": "a"}, {"type": "bytes32[]", "name": "b"}],
-            "stateMutability": "pure",
-            "type": "function",
-        },
-        {
-            "inputs": [{"type": "bytes", "name": "raw"}],
-            "name": "acceptsBytes",
-            "outputs": [],
-            "stateMutability": "nonpayable",
-            "type": "function",
-        },
-    ]
+    # Use the multi_return_contract fixture which has intTuple and tupleConsumer functions
+    test_contract = Contract(multi_return_contract, call_type=CallType.DELEGATECALL)
 
-    mock_contract = MockContract(SAMPLE_ADDRESS, tuple_abi)
-    test_contract = Contract(mock_contract, call_type=CallType.DELEGATECALL)
-
-    # Create a plan with rawValue
+    # Create a plan
     planner = Planner()
     # This would need to be implemented in our SDK
-    # tuple_result = planner.add(test_contract.returnsTuple().raw_value())
-    # planner.add(test_contract.acceptsBytes(tuple_result))
+    # tuple_result = planner.add(test_contract.intTuple().raw_value())
+    # planner.add(test_contract.tupleConsumer(tuple_result))
 
     # For now just verify the basic case works
-    planner.add(test_contract.returnsTuple())
-    planner.add(test_contract.acceptsBytes(b"some_raw_data"))
+    planner.add(test_contract.intTuple())
+    planner.add(test_contract.tupleConsumer(123))
 
     plan = planner.plan()
     assert len(plan["commands"]) == 2

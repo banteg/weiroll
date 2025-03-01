@@ -33,74 +33,36 @@ def token_abi():
     return ERC20_ABI
 
 
-def test_contract_adapter_mock():
+def test_contract_adapter_mock(ape_dai):
     """Test creating a Weiroll contract from a mock object."""
+    # Use the ape_dai fixture which is a real Ape Contract
 
-    # Create a mock contract with address and abi attributes
-    class MockContract:
-        def __init__(self):
-            self.address = "0x1234567890123456789012345678901234567890"
-            self.abi = ERC20_ABI
-
-            # For ape style test
-            class ContractType:
-                def __init__(self):
-                    self.abi = ERC20_ABI
-
-            self.contract_type = ContractType()
-
-    # Create the mock object
-    mock_contract = MockContract()
-
-    # Test web3.py style
-    weiroll_contract = Contract(mock_contract)
-    assert weiroll_contract.address.lower() == mock_contract.address.lower()
+    # Create a Weiroll contract from the Ape contract
+    weiroll_contract = Contract(ape_dai)
+    assert weiroll_contract.address.lower() == ape_dai.address.lower()
     assert weiroll_contract.call_type == CallType.CALL
     assert "balanceOf" in weiroll_contract.functions
     assert "transfer" in weiroll_contract.functions
 
-    # Test ape style with contract_type attribute
-    new_mock = MockContract()  # Create a new instance
-    new_mock.abi = None  # Remove abi to force using contract_type path
-    weiroll_contract_ape = Contract(new_mock)
-    assert weiroll_contract_ape.address.lower() == new_mock.address.lower()
-    assert weiroll_contract_ape.call_type == CallType.CALL
-    assert "balanceOf" in weiroll_contract_ape.functions
-    assert "transfer" in weiroll_contract_ape.functions
-
-    # Test library flag
-    library_contract = Contract(mock_contract, call_type=CallType.DELEGATECALL)
+    # Test library flag (DELEGATECALL)
+    library_contract = Contract(ape_dai, call_type=CallType.DELEGATECALL)
     assert library_contract.call_type == CallType.DELEGATECALL
 
 
-def test_planner_integration_with_mock():
-    """Test integrating with the planner using a mock contract."""
-
-    # Create a mock contract
-    class MockContract:
-        def __init__(self):
-            self.address = "0x1234567890123456789012345678901234567890"
-            self.abi = ERC20_ABI
-
-            class ContractType:
-                def __init__(self):
-                    self.abi = ERC20_ABI
-
-            self.contract_type = ContractType()
-
-    # Setup contracts
-    token = MockContract()
-    recipient_address = "0x0987654321098765432109876543210987654321"
+def test_planner_integration_with_mock(ape_dai, recipient):
+    """Test integrating with the planner using a real Ape contract."""
+    # Use the ape_dai fixture for the token
+    # Use the recipient fixture for the recipient address
 
     # Wrap with Weiroll
-    weiroll_token = Contract(token)
+    weiroll_token = Contract(ape_dai)
 
     # Create a plan
     planner = Planner()
 
     # Add operations to the plan
     amount = 1000 * 10**18  # 1000 tokens
-    planner.add(weiroll_token.transfer(recipient_address, amount))
+    planner.add(weiroll_token.transfer(recipient.address, amount))
 
     # Generate the plan
     plan = planner.plan()
