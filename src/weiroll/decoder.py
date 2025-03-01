@@ -408,31 +408,22 @@ class Decoder:
                 # For the deposit selector specifically, handle different versions
                 logger.debug(f"Processing selector in decode_command_with_abi: {fn_selector}")
 
-                if fn_selector.lower() == "0xb6b55f25":  # deposit(uint256)
-                    function_signature = "deposit(uint256)"
-                    function_name = "deposit"
-                    logger.debug(f"Matched deposit(uint256) selector in decode_command_with_abi: {fn_selector}")
-                elif fn_selector.lower() == "0x6e553f65":  # deposit(uint256,address)
-                    function_signature = "deposit(uint256,address)"
-                    function_name = "deposit"
-                    logger.debug(f"Matched deposit(uint256,address) selector in decode_command_with_abi: {fn_selector}")
-                else:
-                    # For other selectors, use decode_input
-                    selector_bytes = bytes.fromhex(fn_selector[2:] if fn_selector.startswith("0x") else fn_selector)
-                    min_calldata = selector_bytes + b"\x00" * 32  # Add one parameter of zeros
+                # For other selectors, use decode_input
+                selector_bytes = bytes.fromhex(fn_selector[2:] if fn_selector.startswith("0x") else fn_selector)
+                min_calldata = selector_bytes + b"\x00" * 32  # Add one parameter of zeros
 
-                    # Use decode_input to get the function signature
-                    decoded_input = contract.decode_input(min_calldata)
-                    if decoded_input and len(decoded_input) > 0:
-                        # First element is the function signature string
-                        function_signature = decoded_input[0]
-                        function_name = function_signature.split("(")[0]
+                # Use decode_input to get the function signature
+                decoded_input = contract.decode_input(min_calldata)
+                if decoded_input and len(decoded_input) > 0:
+                    # First element is the function signature string
+                    function_signature = decoded_input[0]
+                    function_name = function_signature.split("(")[0]
 
-                    decoded.function = {
-                        "name": function_name,
-                        "signature": function_signature,
-                        "selector": fn_selector,  # Keep the original selector
-                    }
+                decoded.function = {
+                    "name": function_name,
+                    "signature": function_signature,
+                    "selector": fn_selector,  # Keep the original selector
+                }
             except Exception as e:
                 # Fall back to identifier_lookup if decode_input fails
                 logger.debug(f"Error using decode_input in decode_command_with_abi: {e}")
