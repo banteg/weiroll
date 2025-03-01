@@ -21,7 +21,7 @@ def test_web3py_contract_adapter():
     ]
 
     # Create Weiroll contract
-    weiroll_contract = Contract.create_contract(mock_web3_contract)
+    weiroll_contract = Contract(mock_web3_contract)
 
     # Verify contract properties
     assert weiroll_contract.address == "0x1234567890123456789012345678901234567890"
@@ -29,7 +29,7 @@ def test_web3py_contract_adapter():
     assert weiroll_contract.call_type == CallType.CALL
 
     # Create a library contract
-    library_contract = Contract.create_library(mock_web3_contract)
+    library_contract = Contract(mock_web3_contract, call_type=CallType.DELEGATECALL)
     assert library_contract.call_type == CallType.DELEGATECALL
 
 
@@ -53,7 +53,7 @@ def test_ape_contract_adapter(mocker):
     mock_ape_contract.contract_type = mock_contract_type
 
     # Create Weiroll contract
-    weiroll_contract = Contract.create_contract(mock_ape_contract)
+    weiroll_contract = Contract(mock_ape_contract)
 
     # Verify contract properties
     assert weiroll_contract.address == "0x1234567890123456789012345678901234567890"
@@ -61,7 +61,7 @@ def test_ape_contract_adapter(mocker):
     assert weiroll_contract.call_type == CallType.CALL
 
     # Create a library contract
-    library_contract = Contract.create_library(mock_ape_contract)
+    library_contract = Contract(mock_ape_contract, call_type=CallType.DELEGATECALL)
     assert library_contract.call_type == CallType.DELEGATECALL
 
 
@@ -77,7 +77,7 @@ def test_unsupported_contract_type():
 
     # Should raise InvalidContractError for missing both abi and contract_type
     with pytest.raises(InvalidContractError, match="Unsupported contract object type"):
-        Contract.create_contract(unsupported_obj)
+        Contract(unsupported_obj)
 
     # Create a contract_type that doesn't have proper ABI access methods
     class ContractTypeWithoutAbi:
@@ -92,7 +92,7 @@ def test_unsupported_contract_type():
 
     # Should raise InvalidContractError for unusable contract_type
     with pytest.raises(InvalidContractError, match="Could not get valid ABI from contract_type"):
-        Contract.create_contract(incomplete_obj)
+        Contract(incomplete_obj)
 
 
 def test_empty_abi_error():
@@ -104,7 +104,7 @@ def test_empty_abi_error():
 
     # Should raise EmptyABIError for empty ABI
     with pytest.raises(EmptyABIError, match="Contract ABI cannot be empty"):
-        Contract.create_contract(mock_contract)
+        Contract(mock_contract)
 
     # Create a contract with None ABI
     none_abi_contract = MagicMock()

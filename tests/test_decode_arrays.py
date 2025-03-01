@@ -7,9 +7,9 @@ from weiroll import Contract, Planner
 def test_decode_uniswap_path_array(ape_dai, ape_weth, ape_uniswap, recipient):
     """Test that address arrays used with Uniswap are properly encoded and can be decoded."""
     # Wrap contracts with Weiroll
-    Contract.create_contract(ape_dai)
-    Contract.create_contract(ape_weth)
-    uniswap_wei = Contract.create_contract(ape_uniswap)
+    Contract(ape_dai)
+    Contract(ape_weth)
+    uniswap_wei = Contract(ape_uniswap)
 
     # Create planner
     planner = Planner()

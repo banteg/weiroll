@@ -29,7 +29,7 @@ def get_math_contract():
     ]
 
     math_contract = MockContract(SAMPLE_ADDRESS, math_abi)
-    return Contract.create_contract(math_contract)
+    return Contract(math_contract)
 
 
 def get_strings_contract():
@@ -55,7 +55,7 @@ def get_strings_contract():
     ]
 
     strings_contract = MockContract(SAMPLE_ADDRESS, strings_abi)
-    return Contract.create_contract(strings_contract)
+    return Contract(strings_contract)
 
 
 def test_simple_program():
@@ -162,7 +162,7 @@ def test_call_types():
     ]
 
     mock_library = MockContract(SAMPLE_ADDRESS, delegatecall_abi)
-    delegatecall_math = Contract.create_library(mock_library)
+    delegatecall_math = Contract(mock_library, call_type=CallType.DELEGATECALL)
     assert delegatecall_math.add(1, 2).call_type == CallType.DELEGATECALL
 
     # Test STATICCALL via .staticcall()
@@ -188,7 +188,7 @@ def test_value_calls():
     ]
 
     mock_contract = MockContract(SAMPLE_ADDRESS, payable_abi)
-    payable_contract = Contract.create_contract(mock_contract)
+    payable_contract = Contract(mock_contract)
 
     # Test withValue call
     value_call = payable_contract.deposit(123).with_value(456)

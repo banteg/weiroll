@@ -62,7 +62,7 @@ class Planner:
         Example:
             ```python
             planner = Planner()
-            token = Contract.create_contract(token_contract)
+            token = Contract(token_contract)
             recipient = "0x1234..."
             amount = 1000
 

@@ -1,4 +1,4 @@
-from weiroll import Contract, Decoder, Planner
+from weiroll import Contract, Decoder, Planner, CallType
 
 
 # Mock contract objects for testing
@@ -50,7 +50,7 @@ def test_plan_decoding():
 
     # Create a mock contract
     math_contract = MockContract(math_addr, math_abi)
-    math = Contract.create_library(math_contract)
+    math = Contract(math_contract, call_type=CallType.DELEGATECALL)
 
     # Create a planner with a few operations
     planner = Planner()
@@ -125,7 +125,7 @@ def test_show_tree_format():
     """Test that the show_tree method formats plans in the correct tree format."""
     # Create a test planner with dependent commands
     math_addr = "0x1234567890123456789012345678901234567890"
-    math = Contract.create_library(MockContract(math_addr, []))
+    math = Contract(MockContract(math_addr, []), call_type=CallType.DELEGATECALL)
 
     # Create a planner with a few operations where outputs are used as inputs
     planner = Planner()
@@ -164,7 +164,7 @@ def test_planner_reconstruction():
     """Test that a plan can be converted back to a Planner object."""
     # Create a test planner with a few operations
     math_addr = "0x1234567890123456789012345678901234567890"
-    math = Contract.create_library(MockContract(math_addr, []))
+    math = Contract(MockContract(math_addr, []), call_type=CallType.DELEGATECALL)
 
     # Create a planner with operations
     planner = Planner()

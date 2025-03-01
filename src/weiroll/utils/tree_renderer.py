@@ -1,4 +1,4 @@
-from typing import Any, Dict, Tuple, Optional
+from typing import Any, Optional
 
 from eth_utils import to_checksum_address
 
@@ -130,21 +130,21 @@ def render_tree(
 def get_function_signature(command: dict[str, Any], contracts: dict[str, Any] | None = None) -> str:
     """
     Get function signature from contracts dictionary or fallback to command's function field.
-    
+
     Args:
         command: Command dictionary containing 'to', 'selector', and 'function' fields
         contracts: Optional dictionary of contract objects to decode function selectors
-        
+
     Returns:
         Function signature string
     """
     function_signature = command.get("function", "")
-    
+
     # If we have valid contracts dictionary, try to get a better function signature
     if contracts and isinstance(contracts, dict):
         target_addr = command.get("to", "").lower() if isinstance(command.get("to", ""), str) else ""
         selector = command.get("selector", "").lower() if isinstance(command.get("selector", ""), str) else ""
-        
+
         # Try to get function signature from contracts
         if target_addr and selector and target_addr in contracts:
             contract = contracts.get(target_addr)
@@ -154,19 +154,19 @@ def get_function_signature(command: dict[str, Any], contracts: dict[str, Any] | 
                 method_signature = get_method_signature_from_contract(contract, selector)
                 if method_signature:
                     return method_signature
-    
+
     return function_signature
 
 
 def get_parameter_type(command: dict[str, Any], param_index: int, contracts: dict[str, Any] | None = None) -> str:
     """
     Get parameter type for a given parameter index in a command.
-    
+
     Args:
         command: Command dictionary
         param_index: Index of the parameter
         contracts: Optional dictionary of contract objects
-        
+
     Returns:
         Parameter type string with surrounding parentheses, or empty string if unknown
     """
@@ -174,14 +174,14 @@ def get_parameter_type(command: dict[str, Any], param_index: int, contracts: dic
     if contracts and isinstance(contracts, dict):
         target_addr = command.get("to", "").lower() if isinstance(command.get("to", ""), str) else ""
         selector = command.get("selector", "").lower() if isinstance(command.get("selector", ""), str) else ""
-        
+
         if target_addr and selector and target_addr in contracts:
             contract = contracts.get(target_addr)
             if contract:
                 param_type = get_param_type_from_contract(contract, selector, param_index)
                 if param_type:
                     return f" ({param_type})"
-    
+
     return ""
 
 
@@ -189,11 +189,11 @@ def get_method_signature_from_contract(contract: Any, selector: str) -> Optional
     """
     Extract method signature from contract using selector.
     This implementation depends on the structure of the contract objects.
-    
+
     Args:
         contract: Contract object
         selector: Function selector (4 bytes hex string)
-        
+
     Returns:
         Method signature string or None if not found
     """
@@ -206,12 +206,12 @@ def get_param_type_from_contract(contract: Any, selector: str, param_index: int)
     """
     Get parameter type for a specific parameter in a function.
     This implementation depends on the structure of the contract objects.
-    
+
     Args:
         contract: Contract object
         selector: Function selector (4 bytes hex string)
         param_index: Index of the parameter
-        
+
     Returns:
         Parameter type string or None if not found
     """

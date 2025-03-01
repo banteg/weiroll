@@ -25,7 +25,7 @@ def test_planner_basic():
 
     # Create a Contract instance
     mock_contract = MockContract(address, abi)
-    contract = Contract.create_contract(mock_contract)
+    contract = Contract(mock_contract)
 
     # Create a Planner
     planner = Planner()
@@ -83,7 +83,7 @@ def test_planner_chained_operations():
 
     # Create a Contract instance
     mock_contract = MockContract(address, abi)
-    contract = Contract.create_contract(mock_contract)
+    contract = Contract(mock_contract)
 
     # Create a Planner
     planner = Planner()
@@ -111,7 +111,7 @@ def test_planner_with_value_call():
 
     # Create a Contract instance
     mock_contract = MockContract(address, abi)
-    contract = Contract.create_contract(mock_contract)
+    contract = Contract(mock_contract)
 
     # Get the deposit function and set it to use CALL
     deposit_fn = contract.deposit

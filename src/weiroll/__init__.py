@@ -10,8 +10,8 @@ Basic usage:
 from weiroll import Contract, Planner
 
 # Create contract wrappers
-token = Contract.create_contract(token_contract)
-vault = Contract.create_contract(vault_contract)
+token = Contract(token_contract)
+vault = Contract(vault_contract)
 
 # Build a plan
 with Planner() as planner:

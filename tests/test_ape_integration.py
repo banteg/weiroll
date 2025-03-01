@@ -9,7 +9,7 @@ pytestmark = pytest.mark.skipif(not hasattr(ApeContract, "__module__"), reason="
 def test_ape_contract_adapter(ape_dai, recipient):
     """Test integration with Ape contracts."""
     # Create a Weiroll contract from the Ape contract
-    weiroll_contract = Contract.create_contract(ape_dai)
+    weiroll_contract = Contract(ape_dai)
 
     # Verify contract was properly created
     assert weiroll_contract.address.lower() == str(ape_dai.address).lower()
@@ -35,5 +35,5 @@ def test_ape_contract_adapter(ape_dai, recipient):
     assert "0xa9059cbb" in plan["commands"][0]
 
     # Test creating a library contract
-    library_contract = Contract.create_library(ape_dai)
+    library_contract = Contract(ape_dai, call_type=CallType.DELEGATECALL)
     assert library_contract.call_type == CallType.DELEGATECALL

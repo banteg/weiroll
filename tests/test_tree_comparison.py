@@ -29,8 +29,8 @@ def test_vault_plan_tree_and_decoder_match():
     for a vault deposit and redeem example.
     """
     # Create the token and vault contracts
-    token = Contract.create_contract(ape.Contract("0x6B175474E89094C44Da98b954EedeAC495271d0F"))
-    vault = Contract.create_contract(ape.Contract("0xd8063123BBA3B480569244AE66BFE72B6c84b00d"))
+    token = Contract(ape.Contract("0x6B175474E89094C44Da98b954EedeAC495271d0F"))
+    vault = Contract(ape.Contract("0xd8063123BBA3B480569244AE66BFE72B6c84b00d"))
 
     # Set up the user address and amount
     user = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"

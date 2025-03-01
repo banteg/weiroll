@@ -1,5 +1,7 @@
 # Weiroll Development Guide
 
+CLAUDE DO NOT EDIT FILES MARKED "BUNNY VISION"
+
 ## Python SDK
 
 ### Overview
@@ -18,19 +20,13 @@ The Python SDK provides bindings to interact with the Weiroll VM. It allows crea
 ### Contract Adapters
 Weiroll provides adapters for different contract interfaces:
 
-1. **Web3.py contracts**:
-   ```python
-   from weiroll import Contract
-   contract = Contract.create_contract(web3_contract)
-   ```
-
 2. **Ape contracts**:
    ```python
    from ape import Contract as ApeContract
    from weiroll import Contract
    
    ape_contract = ApeContract("0x6B175474E89094C44Da98b954EedeAC495271d0F")
-   contract = Contract.create_contract(ape_contract)
+   contract = Contract(ape_contract)
    ```
 
 3. **Direct ABI**:
@@ -87,9 +83,9 @@ Custom exceptions available in `weiroll.exceptions`:
 from weiroll import Contract, Planner, CallType
 
 # Create a contract wrapper
-contract = Contract.create_contract(web3_contract)  # For web3.py contracts
+contract = Contract(web3_contract)  # For web3.py contracts
 # OR
-contract = Contract.create_contract(ape_contract)   # For ape contracts
+contract = Contract(ape_contract)   # For ape contracts
 
 # Create a planner and add operations
 planner = Planner()

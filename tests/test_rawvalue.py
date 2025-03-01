@@ -1,4 +1,4 @@
-from weiroll import Contract, Planner
+from weiroll import Contract, Planner, CallType
 
 
 # Mock contract objects that will be wrapped
@@ -32,7 +32,7 @@ def test_tuple_rawvalue():
     ]
 
     mock_contract = MockContract(SAMPLE_ADDRESS, tuple_abi)
-    test_contract = Contract.create_library(mock_contract)
+    test_contract = Contract(mock_contract, call_type=CallType.DELEGATECALL)
 
     # Create a plan with rawValue
     planner = Planner()
