@@ -37,6 +37,7 @@ def recipient():
 
 # Create fixtures for custom contract types used in tests
 
+
 @pytest.fixture
 def math_contract():
     """Math contract with add function"""
@@ -187,11 +188,11 @@ def deposit_contract():
 
 def create_ape_contract(address, abi):
     """Create an Ape contract with custom ABI"""
-    # Create a ContractType with the given ABI
-    contract_type = ContractType(abi=abi, name="TestContract")
-    
+    # Create a ContractType with the given ABI 
+    contract_type = ContractType(abi=abi, contractName="TestContract")
+
     # Create a ContractContainer with the contract type
     container = ContractContainer(contract_type=contract_type)
-    
+
     # Return a contract instance at the given address
     return container.at(address)
