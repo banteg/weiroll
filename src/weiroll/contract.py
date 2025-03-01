@@ -7,6 +7,7 @@ from typing import Any
 from ape import Contract as ApeContract
 from ape.contracts.base import _select_method_abi
 from eth_utils import to_bytes
+from eth_utils.crypto import keccak
 from ethpm_types import MethodABI
 
 from .command import CommandArg
@@ -61,7 +62,7 @@ class ContractFunction:
         return FunctionCall(self, single_abi, list(args))
 
     def with_value(self, value: int) -> "ContractFunction":
-        result = ContractFunction(self.contract, self.fn_name, self.fn_sig, CallType.VALUECALL)
+        result = ContractFunction(self.contract, self.method_abis, CallType.VALUECALL)
         result.value = value
         return result
 
@@ -85,7 +86,7 @@ class FunctionCall:
             raise ValueError("Only CALL operations can be made static")
 
         result = ContractFunction(self.fn.contract, self.fn.method_abis, CallType.STATICCALL)
-        return FunctionCall(result, self.args)
+        return FunctionCall(result, self.method_abi, self.args)
 
     def raw_value(self) -> "FunctionCall":
         """
@@ -105,7 +106,11 @@ class FunctionCall:
 
     @property
     def selector(self) -> bytes:
-        return self.method_abi.selector
+        return keccak(text=self.method_abi.selector)[:4]
+
+    @property
+    def signature(self) -> bytes:
+        return self.method_abi.signature
 
     @property
     def target(self) -> bytes:
