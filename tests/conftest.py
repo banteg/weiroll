@@ -186,6 +186,32 @@ def deposit_contract():
     return create_ape_contract(address, abi)
 
 
+@pytest.fixture
+def executor_contract():
+    """Contract with functions for executing subplans"""
+    address = "0x3456789012345678901234567890123456789012"
+    abi = [
+        {
+            "type": "function",
+            "name": "execute",
+            "inputs": [
+                {"name": "commands", "type": "bytes32[]"}, 
+                {"name": "state", "type": "bytes[]"}
+            ],
+            "outputs": [{"name": "newState", "type": "bytes[]"}],
+        },
+        {
+            "type": "function",
+            "name": "processState",
+            "inputs": [
+                {"name": "state", "type": "bytes[]"}
+            ],
+            "outputs": [{"name": "newState", "type": "bytes[]"}],
+        },
+    ]
+    return create_ape_contract(address, abi)
+
+
 def create_ape_contract(address, abi):
     """Create an Ape contract with custom ABI"""
     # Create a ContractType with the given ABI 

@@ -74,10 +74,53 @@ result1 = planner.add(library.someFunction(arg1, arg2))
 # For external contracts, use CALL
 result2 = planner.add(external.someFunction(arg1, arg2))
 
-# For view functions, use STATICCALL (not directly supported yet, but will be added)
+# For view functions, use STATICCALL
+result3 = planner.add(external.viewFunction(arg1).staticcall())
 
 # For payable functions, use CALL with value
-result3 = planner.add(payable.deposit().withValue(web3.toWei(1, "ether")))
+result4 = planner.add(payable.deposit().with_value(1000000000000000000))  # 1 ETH
+```
+
+### Subplans for Nested Execution
+
+Subplans allow you to create nested execution contexts, which are especially useful for:
+- Flash loans
+- Callbacks
+- Control flow operations
+
+```python
+from weiroll import Planner, SubplanValue
+
+# Create a subplan (inner execution context)
+subplan = Planner()
+result1 = subplan.add(token.balanceOf(user_address))
+result2 = subplan.add(token.transfer(recipient, result1))
+
+# Create the main planner
+planner = Planner()
+
+# Add the subplan to the main planner
+# The function must take a SubplanValue and the planner.state_value
+planner.addSubplan(executor.execute(SubplanValue(subplan), planner.state_value))
+
+# You can access return values from the subplan in the main planner
+planner.add(logger.logSuccess(result2))
+```
+
+### Replacing State
+
+For specialized operations, you can replace the entire planner state:
+
+```python
+# Create a planner
+planner = Planner()
+
+# Add some operations
+result = planner.add(token.transfer(recipient, amount))
+
+# Replace the state with a function call
+# The function must return bytes[]
+planner.replaceState(processor.processState(planner.state_value))
 ```
 
 ### Handling Complex Data Types
@@ -99,6 +142,10 @@ planner.add(contract.setData(b"\x01\x02\x03"))
 
 # Arrays
 planner.add(contract.setArray([1, 2, 3]))
+
+# Address arrays (important for swap paths)
+path = [str(token1.address), str(token2.address), str(token3.address)]
+planner.add(router.swapExactTokensForTokens(amount, 0, path, recipient, deadline))
 ```
 
 ## Integration with Web3

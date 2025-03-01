@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from eth_utils import to_bytes, to_hex
 
-from .constants import EXT_BIT, TUP_BIT, ArgType, CallType
+from .constants import EXT_BIT, TUP_BIT, ArgType, CallType, CommandType
 
 
 @dataclass
@@ -11,18 +11,46 @@ class CommandArg:
 
     index: int
     is_dynamic: bool = False
+    is_subplan: bool = False  # Indicates this arg is a subplan
+    is_state: bool = False  # Indicates this arg is the planner state
 
     def encode(self) -> bytes:
-        """Encode the argument specification as a byte."""
+        """
+        Encode the argument specification as a byte.
+        
+        Special values:
+        - For Subplans: The index will be updated during planning (initially -1)
+        - For State: Use 0xFE (the special state value index)
+        """
+        if self.is_state:
+            # State is represented as 0xFE
+            return bytes([0xFE])
+        
+        if self.is_subplan:
+            # The actual index will be filled in during planning
+            # For now, we just mark it as dynamic
+            var_bit = 0x80
+            # The index will be provided during planning
+            return bytes([var_bit | (self.index & 0x7F)])
+        
+        # Standard argument
         var_bit = 0x80 if self.is_dynamic else 0
-        return bytes([var_bit | self.index])
+        return bytes([var_bit | (self.index & 0x7F)])
 
     @classmethod
     def from_byte(cls, b: int) -> "CommandArg":
         """Decode an argument from a byte."""
         is_dynamic = (b & 0x80) != 0
         index = b & 0x7F
-        return cls(index=index, is_dynamic=is_dynamic)
+        
+        # Handle special cases
+        is_state = (index == 0x7E)  # 0xFE & 0x7F = 0x7E
+        
+        return cls(
+            index=index, 
+            is_dynamic=is_dynamic,
+            is_state=is_state
+        )
 
 
 @dataclass
@@ -36,6 +64,7 @@ class Command:
     call_type: CallType = CallType.DELEGATECALL
     is_tuple_return: bool = False  # For raw value capture of return values
     extended_inputs: bool = False  # For handling more than 6 arguments
+    command_type: CommandType = CommandType.CALL  # Type of command (standard, rawcall, subplan)
 
     @property
     def flags(self) -> int:

@@ -27,30 +27,32 @@ with Planner() as planner:
 """
 
 from .command import Command, CommandArg
-from .constants import ArgType, CallType
-from .contract import Contract, ContractFunction, FunctionCall, StateValue
+from .constants import ArgType, CallType, CommandType
+from .contract import Contract, ContractFunction, FunctionCall, StateValue, SubplanValue
 from .decoder import DecodedCommand, DecodedPlan, Decoder
 from .exceptions import EmptyABIError, InvalidContractError, WeirollError
 from .planner import Planner
 
 __all__ = [
-    "ArgType",
     # Enums and constants
+    "ArgType",
     "CallType",
+    "CommandType",
+    # Main classes
     "Command",
     "CommandArg",
-    # Main classes
     "Contract",
     # Core components
     "ContractFunction",
     "DecodedCommand",
     "DecodedPlan",
     "Decoder",
-    "EmptyABIError",
     "FunctionCall",
-    "InvalidContractError",
     "Planner",
     "StateValue",
+    "SubplanValue",
     # Exceptions
+    "EmptyABIError",
+    "InvalidContractError",
     "WeirollError",
 ]

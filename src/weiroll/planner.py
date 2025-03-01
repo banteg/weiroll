@@ -1,12 +1,19 @@
-from typing import Any, Literal
+from typing import Any, Dict, Literal, Optional, Set, Tuple
+import logging
+from eth_abi import encode
+from eth_abi.exceptions import EncodingError
+from eth_utils import to_hex
 
 from ape import Contract as ApeContract
-from eth_abi import encode
 
 from .command import Command, CommandArg
-from .constants import CallType
-from .contract import FunctionCall, StateValue
+from .constants import ArgType, CallType, CommandType
+from .contract import FunctionCall, StateValue, SubplanValue
 from .utils.tree_renderer import render_tree
+
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class Planner:
@@ -20,12 +27,21 @@ class Planner:
         commands: List of commands to execute
         state: List of state values used by commands
         next_state_index: Next available index in the state array
+        state_value: Represents the current planner state for use with addSubplan
     """
 
     def __init__(self):
         self.commands: list[Command] = []
         self.state: list[Any] = []
         self.next_state_index: int = 0
+        
+        # Visibility tracking for optimization
+        self._command_visibility: Dict[Command, Command] = {}  # Map command to last command that uses its output
+        self._literal_visibility: Dict[Any, Command] = {}      # Map literal value to last command that uses it
+        
+        # The placeholder for the current planner state
+        self.state_value = StateValue(-1, is_dynamic=True)
+        self.state_value.to_arg = lambda: CommandArg(index=-1, is_dynamic=True, is_state=True)
 
     def _add_to_state(self, value: Any, is_dynamic: bool = False) -> int:
         """
@@ -73,6 +89,13 @@ class Planner:
             planner.add(another_contract.process_token_transfer(result))
             ```
         """
+        # Check arguments for subplans (not allowed in regular add)
+        for arg in fn_call.args:
+            if isinstance(arg, SubplanValue):
+                raise ValueError(
+                    "SubplanValue arguments can only be used with addSubplan"
+                )
+
         # Process arguments
         input_args: list[CommandArg] = []
 
@@ -89,7 +112,7 @@ class Planner:
                 input_args.append(arg.to_arg())
             else:
                 # Add literal value to state
-                is_dynamic = isinstance(arg, bytes | str | list | tuple)
+                is_dynamic = isinstance(arg, (bytes, str, list, tuple))
                 state_index = self._add_to_state(arg, is_dynamic)
                 input_args.append(CommandArg(index=state_index, is_dynamic=is_dynamic))
 
@@ -105,12 +128,214 @@ class Planner:
             inputs=input_args,
             output=CommandArg(index=output_index),
             call_type=fn_call.call_type,
+            command_type=CommandType.CALL,
         )
 
         self.commands.append(command)
         return output
 
-    # We're now using direct type checking in the plan() method instead of singledispatchmethod
+    def addSubplan(self, fn_call: FunctionCall) -> None:
+        """
+        Add a call to a subplan. This executes a nested instance of the Weiroll VM.
+
+        Subplans are commonly used for:
+        - Flashloans
+        - Control flow
+        - Callback-based operations
+
+        A function call passed to addSubplan must:
+        - Take a SubplanValue (created from a Planner) as one argument
+        - Take the planner.state_value as another argument
+        - Return either nothing or a bytes[] that will replace the parent planner state
+
+        Args:
+            fn_call: The function call containing the subplan
+
+        Example:
+            ```python
+            # Create main planner
+            planner = Planner()
+            
+            # Create subplan
+            subplan = Planner()
+            subplan.add(token.transfer(recipient, amount))
+            
+            # Add subplan to the main planner
+            planner.addSubplan(flashloan.execute(subplan, planner.state_value))
+            ```
+        """
+        # Check for subplan and state arguments
+        has_subplan = False
+        has_state = False
+        subplan_index = -1
+        
+        # Process arguments
+        input_args: list[CommandArg] = []
+        
+        # Handle value for value calls
+        if fn_call.call_type == CallType.VALUECALL and fn_call.fn.value > 0:
+            # Add value as first argument
+            value_index = self._add_to_state(fn_call.fn.value)
+            input_args.append(CommandArg(index=value_index))
+        
+        # Process function arguments and check for subplan/state
+        for i, arg in enumerate(fn_call.args):
+            if isinstance(arg, SubplanValue):
+                if has_subplan:
+                    raise ValueError("Subplans can only take one planner argument")
+                has_subplan = True
+                subplan_index = i
+                
+                # Create a placeholder for now - we'll replace it during planning
+                input_args.append(CommandArg(index=-1, is_dynamic=True, is_subplan=True))
+            elif isinstance(arg, StateValue) and arg.to_arg().is_state:
+                if has_state:
+                    raise ValueError("Subplans can only take one state argument")
+                has_state = True
+                
+                # Add the state placeholder
+                input_args.append(CommandArg(index=-1, is_dynamic=True, is_state=True))
+            elif isinstance(arg, StateValue):
+                # Use existing state value
+                input_args.append(arg.to_arg())
+            else:
+                # Add literal value to state
+                is_dynamic = isinstance(arg, (bytes, str, list, tuple))
+                state_index = self._add_to_state(arg, is_dynamic)
+                input_args.append(CommandArg(index=state_index, is_dynamic=is_dynamic))
+        
+        if not has_subplan or not has_state:
+            raise ValueError("Subplans must take planner and state arguments")
+            
+        # Verify return type is bytes[] or void
+        if fn_call.method_abi.outputs and len(fn_call.method_abi.outputs) > 0:
+            output_type = fn_call.method_abi.outputs[0].canonical_type
+            if output_type != "bytes[]":
+                raise ValueError("Subplans must return a bytes[] replacement state or nothing")
+        
+        # Create command
+        command = Command(
+            function_selector=fn_call.selector,
+            target=fn_call.target,
+            inputs=input_args,
+            output=CommandArg(index=ArgType.USE_STATE),
+            call_type=fn_call.call_type,
+            command_type=CommandType.SUBPLAN,
+        )
+        
+        # Store the subplan for later processing
+        # We'll encode it during the planning phase
+        command.subplan = fn_call.args[subplan_index].planner if has_subplan else None
+        
+        self.commands.append(command)
+
+    def replaceState(self, fn_call: FunctionCall) -> None:
+        """
+        Execute a function call that replaces the planner state with its return value.
+        
+        This can be used for functions that make arbitrary changes to the planner state.
+        
+        Args:
+            fn_call: The function call to execute. Must return bytes[].
+            
+        Example:
+            ```python
+            planner = Planner()
+            # Add some initial commands
+            
+            # Replace the state with a function call result
+            planner.replaceState(processor.processState(planner.state_value))
+            ```
+        """
+        # Verify return type is bytes[]
+        if not fn_call.method_abi.outputs or len(fn_call.method_abi.outputs) == 0:
+            raise ValueError("Function replacing state must return a value")
+            
+        output_type = fn_call.method_abi.outputs[0].canonical_type
+        if output_type != "bytes[]":
+            raise ValueError("Function replacing state must return a bytes[]")
+            
+        # Process arguments
+        input_args: list[CommandArg] = []
+        
+        # Handle value for value calls
+        if fn_call.call_type == CallType.VALUECALL and fn_call.fn.value > 0:
+            # Add value as first argument
+            value_index = self._add_to_state(fn_call.fn.value)
+            input_args.append(CommandArg(index=value_index))
+        
+        # Process function arguments
+        for arg in fn_call.args:
+            if isinstance(arg, StateValue) and arg.to_arg().is_state:
+                # Add the state placeholder
+                input_args.append(CommandArg(index=-1, is_dynamic=True, is_state=True))
+            elif isinstance(arg, StateValue):
+                # Use existing state value
+                input_args.append(arg.to_arg())
+            elif isinstance(arg, SubplanValue):
+                raise ValueError("SubplanValue cannot be used with replaceState")
+            else:
+                # Add literal value to state
+                is_dynamic = isinstance(arg, (bytes, str, list, tuple))
+                state_index = self._add_to_state(arg, is_dynamic)
+                input_args.append(CommandArg(index=state_index, is_dynamic=is_dynamic))
+                
+        # Create command
+        command = Command(
+            function_selector=fn_call.selector,
+            target=fn_call.target,
+            inputs=input_args,
+            output=CommandArg(index=ArgType.USE_STATE),
+            call_type=fn_call.call_type,
+            command_type=CommandType.RAWCALL,
+        )
+        
+        self.commands.append(command)
+
+    def _prepare_planning(self) -> None:
+        """
+        Prepare for planning by building visibility maps.
+        This tracks which values are used by which commands.
+        """
+        # Reset tracking maps
+        self._command_visibility = {}
+        self._literal_visibility = {}
+
+    def _build_subplan(self, planner: "Planner", seen: Set["Planner"]) -> str:
+        """
+        Build the subplan commands as a bytes32[] string.
+        
+        Args:
+            planner: The subplanner to build
+            seen: Set of planners already seen (to detect circular references)
+            
+        Returns:
+            str: The hex-encoded commands as a bytes32[]
+        """
+        if planner in seen:
+            raise ValueError("A planner cannot contain itself")
+            
+        # Create a new set with this planner to detect circular references
+        new_seen = seen.copy()
+        new_seen.add(planner)
+        
+        # Build the subplan using the updated seen set to track circular references
+        # This is where we'd detect circular references between planners
+        try:
+            subplan = planner.plan()
+            subcommands = subplan["commands"]
+        except RecursionError:
+            raise ValueError("A planner cannot contain itself (circular reference detected)")
+        
+        # Encode the commands as bytes32[]
+        try:
+            # Convert hex strings to bytes
+            bytes_commands = [bytes.fromhex(cmd[2:]) for cmd in subcommands]
+            encoded = "0x" + encode(["bytes32[]"], [bytes_commands]).hex()
+            # Skip the first 32 bytes which is the offset to the array
+            return encoded[66:]
+        except Exception as e:
+            raise ValueError(f"Failed to encode subplan: {e}")
 
     def plan(self) -> dict[Literal["commands", "state"], list[str]]:
         """
@@ -130,25 +355,47 @@ class Planner:
             state = plan["state"]
             ```
         """
+        # First, prepare for planning (build visibility maps)
+        self._prepare_planning()
+        
+        # Track planners we've seen to detect circular references
+        seen_planners = set()
+        
         encoded_commands = []
         encoded_state = []
 
-        # Debug: print the entire state array
-        print("DEBUG - State array contents:")
-        for i, value in enumerate(self.state):
-            print(f"DEBUG - State[{i}]: {value!r}, type: {type(value).__name__}")
-
-        # Encode commands
+        # Process commands, handling subplans as needed
         for cmd in self.commands:
+            # Handle subplans first, as they may modify inputs
+            if cmd.command_type == CommandType.SUBPLAN:
+                if not hasattr(cmd, "subplan") or cmd.subplan is None:
+                    raise ValueError("Subplan command missing subplan reference")
+                    
+                # Build and encode the subplan
+                encoded_subplan = self._build_subplan(cmd.subplan, seen_planners)
+                
+                # Add the encoded subplan to state
+                subplan_index = self._add_to_state(bytes.fromhex(encoded_subplan[2:]))
+                
+                # Update the subplan argument index
+                for i, arg in enumerate(cmd.inputs):
+                    if arg.is_subplan:
+                        cmd.inputs[i] = CommandArg(
+                            index=subplan_index, 
+                            is_dynamic=True
+                        )
+            
+            # All inputs should be resolved at this point
+            # Encode the command
             encoded_commands.append("0x" + cmd.encode().hex())
 
-        # Encode state
+        # Encode state values
         for i, value in enumerate(self.state):
             try:
-                # Handle each type directly instead of using singledispatchmethod
+                # Handle each type directly
                 if value is None:
                     encoded_state.append("0x")
-                elif isinstance(value, int | bool):
+                elif isinstance(value, (int, bool)):
                     # Encode integers and booleans as uint256
                     if isinstance(value, bool):
                         value = int(value)
@@ -156,11 +403,9 @@ class Planner:
                 elif isinstance(value, str):
                     if value.startswith("0x"):
                         # Ethereum address or hex value, pass through as is
-                        print(f"DEBUG - String value at index {i} starts with 0x, passing through: {value}")
                         encoded_state.append(value)
                     else:
                         # Regular string
-                        print(f"DEBUG - Encoding string at index {i} as ABI string: {value}")
                         encoded_state.append("0x" + encode(["string"], [value]).hex())
                 elif isinstance(value, bytes):
                     # Raw bytes
@@ -179,13 +424,13 @@ class Planner:
                         )
                 else:
                     raise ValueError(f"Unsupported state value type at index {i}: {type(value)}")
-            except ValueError as e:
+            except EncodingError as e:
                 # Re-raise with better error message
                 raise ValueError(f"Failed to encode state at index {i}: {e}")
             except Exception as e:
                 # Catch other exceptions for better debugging
-                print(
-                    f"DEBUG - Exception while encoding value at index {i}: {value!r}, error: {type(e).__name__}: {e!s}"
+                logger.debug(
+                    f"Exception while encoding value at index {i}: {value!r}, error: {type(e).__name__}: {e!s}"
                 )
                 raise ValueError(f"Error encoding value at index {i}: {e}")
 
@@ -246,10 +491,16 @@ class Planner:
                     "function": fn_name,
                     "selector": selector_hex,
                     "inputs": [arg.index for arg in cmd.inputs],
-                    "outputs": [cmd.output.index] if cmd.output else [],
+                    "outputs": [cmd.output.index] if cmd.output and cmd.output.index != ArgType.USE_STATE else [],
+                    "command_type": cmd.command_type.name,
                 }
             )
-            call_types.append(cmd.call_type.name)
+            # Handle both enum and int call types for backward compatibility
+            if hasattr(cmd.call_type, 'name'):
+                call_types.append(cmd.call_type.name)
+            else:
+                # Convert int to enum
+                call_types.append(CallType(cmd.call_type).name)
 
         # Use the common renderer
         return render_tree(commands_for_renderer, self.state, call_types)

@@ -160,3 +160,36 @@ class StateValue:
     def __hash__(self) -> int:
         """Hash function for state values."""
         return hash((self.index, self.is_dynamic))
+
+
+class SubplanValue:
+    """
+    Represents a subplan that can be passed to a function call.
+
+    SubplanValues are used with Planner.addSubplan() to create nested execution
+    contexts, useful for flashloans, control flow, and callback-based operations.
+
+    Attributes:
+        planner: The Planner instance representing the subplan
+    """
+
+    def __init__(self, planner: "Planner"):
+        self.planner = planner
+        # Subplans are always treated as dynamic types
+        self.is_dynamic = True
+
+    def to_arg(self) -> CommandArg:
+        """
+        Convert to a CommandArg for use in commands.
+        This will be a special placeholder, as the actual subplan
+        will be encoded during planning.
+
+        Returns:
+            CommandArg: A command argument representing this subplan
+        """
+        # Use a special index that will be replaced during planning
+        return CommandArg(index=-1, is_dynamic=True, is_subplan=True)
+
+    def __str__(self) -> str:
+        """Return a string representation of the subplan value."""
+        return f"Subplan({len(self.planner.commands)} commands)"

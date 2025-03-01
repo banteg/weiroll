@@ -10,6 +10,20 @@ class CallType(IntEnum):
     VALUECALL = 0x03
 
 
+class CommandType(IntEnum):
+    """
+    Type of command to execute.
+    
+    CALL: Standard function call
+    RAWCALL: Call that replaces planner state with return value
+    SUBPLAN: Execute a nested planner
+    """
+
+    CALL = 0
+    RAWCALL = 1
+    SUBPLAN = 2
+
+
 class ArgType(IntEnum):
     """Special argument type identifiers."""
 

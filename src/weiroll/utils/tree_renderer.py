@@ -49,12 +49,16 @@ def render_tree(
         if isinstance(to_address, str) and to_address.startswith("0x"):
             to_address = to_checksum_address(to_address)
 
-        # Get function signature
+        # Get function signature and command type
         function_signature = command.get("function", "")
         call_type = call_types[i]
+        command_type = command.get("command_type", "CALL")
 
-        # Format the command line header
-        cmd_line = f"Command {i}: {function_signature} @ {to_address} [{call_type}]"
+        # Format the command line header with command type if not a standard CALL
+        if command_type != "CALL":
+            cmd_line = f"Command {i}: {function_signature} @ {to_address} [{call_type}, {command_type}]"
+        else:
+            cmd_line = f"Command {i}: {function_signature} @ {to_address} [{call_type}]"
 
         # Format inputs
         inputs = command.get("inputs", [])
@@ -75,9 +79,24 @@ def render_tree(
                 source_cmd, _ = state_sources.get(input_val, (-1, -1))
                 is_state_reference = source_cmd >= 0
 
+            # Special handling for state placeholder (254 / 0xFE)
+            if isinstance(input_val, int) and input_val == 254:  # USE_STATE placeholder
+                input_lines.append(f"{prefix} Input {j}: <Current VM State>")
+                continue
+
             # Format state reference or direct value
             if isinstance(input_val, int):
-                if is_state_reference:
+                # Special handling for negative indices (placeholders for state or subplans)
+                if input_val < 0:
+                    if "command_type" in command and command["command_type"] == "SUBPLAN":
+                        # Check which input this is in the subplan command
+                        if j == 0:
+                            input_lines.append(f"{prefix} Input {j}: <Subplan>")
+                        else:
+                            input_lines.append(f"{prefix} Input {j}: <Current VM State>")
+                    else:
+                        input_lines.append(f"{prefix} Input {j}: <Special Value>")
+                elif is_state_reference:
                     # Reference to previous command's output
                     if input_val < len(state):
                         # If we have the state value, show both the reference and the value
@@ -103,25 +122,29 @@ def render_tree(
                 formatted_val = format_value(input_val)
                 input_lines.append(f"{prefix} Input {j}: {formatted_val}")
 
-        # Format outputs
+        # Format outputs based on command type
         outputs = command.get("outputs", [])
         output_lines = []
 
-        for j, output_idx in enumerate(outputs):
-            # Find usage info
-            usage_info = state_usage.get(output_idx, [])
-            # Filter out this command itself
-            usage_info = [(cmd_idx, inp_idx) for cmd_idx, inp_idx in usage_info if cmd_idx != i]
+        # For SUBPLAN or RAWCALL that returns bytes[], it will replace state
+        if command_type in ["SUBPLAN", "RAWCALL"] and not outputs:
+            output_lines.append(f"  └─ Output: <Will replace VM state>")
+        elif outputs:
+            for j, output_idx in enumerate(outputs):
+                # Find usage info
+                usage_info = state_usage.get(output_idx, [])
+                # Filter out this command itself
+                usage_info = [(cmd_idx, inp_idx) for cmd_idx, inp_idx in usage_info if cmd_idx != i]
 
-            if usage_info:
-                # Sort by command index for consistent output
-                usage_info.sort(key=lambda x: x[0])
-                next_cmd = usage_info[0][0]
-                usage_str = f" (→ Command {next_cmd})"
-            else:
-                usage_str = " (unused)"
+                if usage_info:
+                    # Sort by command index for consistent output
+                    usage_info.sort(key=lambda x: x[0])
+                    next_cmd = usage_info[0][0]
+                    usage_str = f" (→ Command {next_cmd})"
+                else:
+                    usage_str = " (unused)"
 
-            output_lines.append(f"  └─ Output: State[{output_idx}]{usage_str}")
+                output_lines.append(f"  └─ Output: State[{output_idx}]{usage_str}")
 
         # Combine all lines for this command
         lines.append(cmd_line)

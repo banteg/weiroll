@@ -9,6 +9,8 @@ The Python SDK provides bindings to interact with the Weiroll VM. It allows crea
 
 ### Key Features
 - **Command Execution:** Create and execute sequences of contract calls
+- **Subplans:** Create nested execution contexts for flash loans and callbacks
+- **State Replacement:** Replace planner state during execution for advanced use cases
 - **Plan Visualization:** Display plans as trees with `planner.show_tree()`
 - **Plan Decoding:** Decode encoded plans with enhanced visualization using `Decoder`
 - **Plan Reconstruction:** Recreate Planner objects from decoded plans
@@ -115,6 +117,44 @@ print(planner.show_tree())
 # Get the serialized plan
 plan = planner.plan()
 # Contains commands and state for VM execution
+```
+
+#### Creating and Using Subplans
+```python
+from weiroll import Contract, Planner, SubplanValue
+
+# Create an executor contract wrapper
+executor = Contract(executor_contract)  # Contract that can execute subplans
+
+# Create a subplan for a flash loan callback
+subplan = Planner()
+
+# Add operations to the subplan
+borrowed_balance = subplan.add(token.balanceOf(my_address))
+# Perform operations with borrowed funds
+swap_result = subplan.add(router.swapExactTokensForTokens(
+    borrowed_balance, 0, path, recipient, deadline
+))
+
+# Create main planner
+planner = Planner()
+
+# Add the subplan to be executed by a flash loan
+planner.addSubplan(
+    lending_pool.flashLoan(
+        recipient,
+        token.address,
+        loan_amount,
+        SubplanValue(subplan),  # The subplan to execute in the callback
+        planner.state_value     # The current VM state
+    )
+)
+
+# You can continue using return values from the subplan
+planner.add(logger.logSuccess(swap_result))
+
+# Generate the final plan
+plan = planner.plan()
 ```
 
 #### Plan Decoding and Visualization
