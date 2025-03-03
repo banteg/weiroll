@@ -79,6 +79,12 @@ def test_planner_with_value_call(deposit_contract):
     # Create a Planner
     planner = Planner()
 
+    # Check if deposit function has outputs
+    has_outputs = deposit_fn.method_abis[0].outputs and len(deposit_fn.method_abis[0].outputs) > 0
+    expected_state_entries = 1  # At least value
+    if has_outputs:
+        expected_state_entries += 1  # Plus output if there are outputs
+
     # Add a value call
     planner.add(deposit_fn().with_value(1000000000000000000))  # 1 ETH
 
@@ -93,7 +99,7 @@ def test_planner_with_value_call(deposit_contract):
 
     # Verify the encoded plan
     assert len(plan["commands"]) == 1
-    assert len(plan["state"]) >= 2  # At least value + output
+    assert len(plan["state"]) == expected_state_entries  # Value (and output if applicable)
 
 
 def test_planner_with_extended_inputs(multi_function_contract):
@@ -129,7 +135,7 @@ def test_planner_with_extended_inputs(multi_function_contract):
     decoded_cmd = Command.decode(bytes.fromhex(plan["commands"][0][2:]))  # Remove '0x' prefix
     
     # Check the command has the EXT_BIT flag set
-    assert decoded_cmd.extended_inputs == True
+    assert decoded_cmd.extended_inputs
     
     # Check it has the right number of inputs
     assert len(decoded_cmd.inputs) == 10
@@ -140,3 +146,45 @@ def test_planner_with_extended_inputs(multi_function_contract):
     
     # Check output is correct
     assert decoded_cmd.output.index == 10
+
+
+def test_planner_with_no_output_functions(deposit_contract):
+    """Test that functions with no outputs are handled correctly."""
+    # Create a Contract instance
+    contract = Contract(deposit_contract)
+
+    # Get the deposit function
+    deposit_fn = contract.deposit
+
+    # Create a Planner
+    planner = Planner()
+
+    # Add a call to a function with no outputs
+    result = planner.add(deposit_fn())
+
+    # Verify that the result is None if function has no outputs
+    has_outputs = deposit_fn.method_abis[0].outputs and len(deposit_fn.method_abis[0].outputs) > 0
+    if not has_outputs:
+        assert result is None
+    else:
+        assert result is not None
+
+    # Verify the command
+    assert len(planner.commands) == 1
+    cmd = planner.commands[0]
+    
+    # Verify the command's output is None if the function has no outputs
+    if not has_outputs:
+        assert cmd.output is None
+    else:
+        assert cmd.output is not None
+
+    # Generate the plan
+    plan = planner.plan()
+
+    # Verify the encoded plan
+    assert len(plan["commands"]) == 1
+    
+    # If no outputs, state should only have the arguments (if any)
+    expected_state_entries = 0  # No inputs
+    assert len(plan["state"]) == expected_state_entries

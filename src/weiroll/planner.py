@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Literal, Set
+from typing import Any, Literal, Set
 
 from ape import Contract as ApeContract
 from eth_abi import encode
@@ -33,10 +33,6 @@ class Planner:
         self.state: list[Any] = []
         self.next_state_index: int = 0
 
-        # Visibility tracking for optimization
-        self._command_visibility: Dict[Command, Command] = {}  # Map command to last command that uses its output
-        self._literal_visibility: Dict[Any, Command] = {}  # Map literal value to last command that uses it
-
         # The placeholder for the current planner state
         self.state_value = StateValue(-1, is_dynamic=True)
         self.state_value.to_arg = lambda: CommandArg(index=-1, is_dynamic=True, is_state=True)
@@ -63,7 +59,7 @@ class Planner:
         self.next_state_index += 1
         return state_index
 
-    def add(self, fn_call: FunctionCall) -> StateValue:
+    def add(self, fn_call: FunctionCall) -> StateValue | None:
         """
         Add a function call to the plan and return a reference to its output in state.
 
@@ -71,7 +67,8 @@ class Planner:
             fn_call: The function call to add
 
         Returns:
-            StateValue: A reference to the function's output in the state
+            StateValue: A reference to the function's output in the state, or None if the
+                       function has no outputs.
 
         Example:
             ```python
@@ -112,23 +109,30 @@ class Planner:
                 state_index = self._add_to_state(arg, is_dynamic)
                 input_args.append(CommandArg(index=state_index, is_dynamic=is_dynamic))
 
-        # Create output state value
-        output_index = self.next_state_index
-        output = StateValue(output_index)
-        self.next_state_index += 1
+        # Check if the function has outputs
+        has_outputs = fn_call.method_abi.outputs and len(fn_call.method_abi.outputs) > 0
+
+        # Create output state value only if the function has outputs
+        output = None
+        output_arg = None
+        if has_outputs:
+            output_index = self.next_state_index
+            output = StateValue(output_index)
+            output_arg = CommandArg(index=output_index)
+            self.next_state_index += 1
 
         # Create command
         command = Command(
             function_selector=fn_call.selector,
             target=fn_call.target,
             inputs=input_args,
-            output=CommandArg(index=output_index),
+            output=output_arg,  # This might be None
             call_type=fn_call.call_type,
             command_type=CommandType.CALL,
         )
 
         self.commands.append(command)
-        return output
+        return output  # This might be None
 
     def addSubplan(self, fn_call: FunctionCall) -> None:
         """
@@ -288,15 +292,6 @@ class Planner:
 
         self.commands.append(command)
 
-    def _prepare_planning(self) -> None:
-        """
-        Prepare for planning by building visibility maps.
-        This tracks which values are used by which commands.
-        """
-        # Reset tracking maps
-        self._command_visibility = {}
-        self._literal_visibility = {}
-
     def _build_subplan(self, planner: "Planner", seen: Set["Planner"]) -> str:
         """
         Build the subplan commands as a bytes32[] string.
@@ -351,8 +346,6 @@ class Planner:
             state = plan["state"]
             ```
         """
-        # First, prepare for planning (build visibility maps)
-        self._prepare_planning()
 
         # Track planners we've seen to detect circular references
         seen_planners = set()
