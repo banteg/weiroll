@@ -541,17 +541,17 @@ class Planner:
                     name_found = False
                     
                     # Try to get the name from name() function first
-                    if hasattr(contract, "name") and callable(contract.name):
+                    if hasattr(contract, "name") and callable(getattr(contract, "name")):
                         try:
-                            # Try to call name() but catch exceptions
-                            contract_name = contract.name.call()
+                            # Try to call name() properly - needs to be called as a method
+                            contract_name = contract.name()
                             name_found = True
                         except Exception:
                             # name() call failed, try with symbol() as fallback
-                            if hasattr(contract, "symbol") and callable(contract.symbol):
+                            if hasattr(contract, "symbol") and callable(getattr(contract, "symbol")):
                                 try:
                                     # Try to get symbol as a fallback for name
-                                    contract_name = contract.symbol.call()
+                                    contract_name = contract.symbol()
                                     name_found = True
                                 except Exception:
                                     pass
