@@ -276,6 +276,7 @@ def format_output_line(
 
                     # Try to get parameter name - this is a simplification and could be improved
                     param_name = f"param{input_idx}"
+                    param_full = f"param{input_idx}"  # Full version with type info
 
                     # If we have a function signature, try to extract parameter names
                     function_sig = cmd.get("function", "")
@@ -288,6 +289,7 @@ def format_output_line(
                             params = params_section.split(",")
                             if input_idx < len(params):
                                 param = params[input_idx].strip()
+                                param_full = param  # Keep the full param with type
                                 if " " in param:
                                     # Extract the parameter name from "address receiver" -> "receiver"
                                     param_name = param.split(" ")[1] if len(param.split(" ")) > 1 else param.split(" ")[0]
@@ -297,12 +299,13 @@ def format_output_line(
                         params = params_section.split(",")
                         if input_idx < len(params):
                             param = params[input_idx].strip()
+                            param_full = param  # Keep the full param with type
                             if " " in param:
                                 param_name = param.split(" ")[0]
 
-                    usage_details.append((cmd_idx, function_name, param_name))
+                    usage_details.append((cmd_idx, function_name, param_name, param_full))
                 else:
-                    usage_details.append((cmd_idx, "", f"param{input_idx}"))
+                    usage_details.append((cmd_idx, "", f"param{input_idx}", f"param{input_idx}"))
 
     # Sort by command index
     usage_details.sort()
@@ -323,11 +326,12 @@ def format_output_line(
     # Format the output line with colorization
     if usage_details:
         if len(usage_details) == 1:
-            cmd_idx, fn_name, param_name = usage_details[0]
+            cmd_idx, fn_name, param_name, param_full = usage_details[0]
             
             if fn_name and param_name:
                 cmd_ref = colorize(f"Command {cmd_idx}", "function_name")
-                param_ref = colorize(f"{fn_name}.{param_name}", "param_name")
+                # Use full parameter with type
+                param_ref = colorize(f"{fn_name} {param_full}", "param_name")
                 arrow = colorize("→", "tree_structure")
                 return f"{prefix} {output_label}: {state_ref} {arrow} {cmd_ref} ({param_ref})"
             else:
@@ -337,10 +341,11 @@ def format_output_line(
         else:
             # Multiple usages
             usage_strs = []
-            for cmd_idx, fn_name, param_name in usage_details:
+            for cmd_idx, fn_name, param_name, param_full in usage_details:
                 if fn_name and param_name:
                     cmd_ref = colorize(f"Command {cmd_idx}", "function_name")
-                    param_ref = colorize(f"{fn_name}.{param_name}", "param_name")
+                    # Use full parameter with type
+                    param_ref = colorize(f"{fn_name} {param_full}", "param_name")
                     usage_strs.append(f"{cmd_ref} ({param_ref})")
                 else:
                     cmd_ref = colorize(f"Command {cmd_idx}", "function_name")
