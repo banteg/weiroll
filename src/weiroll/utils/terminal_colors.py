@@ -40,6 +40,22 @@ COLORS = {
     "RESET": "\033[0m",
 }
 
+# State slot colors - used to color-code different state slots
+STATE_SLOT_COLORS = [
+    COLORS["BRIGHT_RED"],
+    COLORS["BRIGHT_GREEN"],
+    COLORS["BRIGHT_YELLOW"],
+    COLORS["BRIGHT_BLUE"],
+    COLORS["BRIGHT_MAGENTA"],
+    COLORS["BRIGHT_CYAN"],
+    COLORS["RED"],
+    COLORS["GREEN"],
+    COLORS["YELLOW"],
+    COLORS["BLUE"],
+    COLORS["MAGENTA"],
+    COLORS["CYAN"],
+]
+
 # Tree colors mapping by element type
 TREE_COLORS = {
     "command_header": COLORS["BRIGHT_BLUE"] + COLORS["BOLD"],
@@ -48,7 +64,7 @@ TREE_COLORS = {
     "command_header_delegatecall": COLORS["YELLOW"] + COLORS["BOLD"],
 
     "tree_structure": COLORS["GRAY"],
-    "state_ref": COLORS["MAGENTA"],
+    "state_ref": COLORS["MAGENTA"],  # Default state reference color (when not using color by slot)
     "param_name": COLORS["CYAN"],
     "function_name": COLORS["BRIGHT_GREEN"],
     "address": COLORS["YELLOW"],
@@ -113,6 +129,29 @@ def colorize(text: str, color_key: str, use_color: Optional[bool] = None) -> str
     
     return f"{color_code}{text}{COLORS['RESET']}"
 
+def colorize_state_ref(text: str, slot_index: int, use_color: Optional[bool] = None) -> str:
+    """
+    Apply slot-based coloring to a state reference.
+    
+    Args:
+        text: State reference text to colorize
+        slot_index: The state slot index to use for color selection
+        use_color: Force color on/off, defaults to auto-detection
+        
+    Returns:
+        Colored text string if colors are supported, otherwise the original text
+    """
+    # Determine if we should use color
+    should_use_color = supports_color() if use_color is None else use_color
+    
+    if not should_use_color:
+        return text
+    
+    # Get the color for this state slot
+    color_code = get_state_slot_color(slot_index)
+    
+    return f"{color_code}{text}{COLORS['RESET']}"
+
 def get_color_mode() -> bool:
     """
     Get the current color mode based on environment and terminal detection.
@@ -121,3 +160,23 @@ def get_color_mode() -> bool:
         bool: True if colors should be used, False otherwise
     """
     return supports_color()
+
+def get_state_slot_color(slot_index: int) -> str:
+    """
+    Get the color code for a specific state slot.
+    This allows visually tracking state values across commands.
+    
+    Args:
+        slot_index: The state slot index
+        
+    Returns:
+        str: ANSI color code for this state slot
+    """
+    # For special values like uint256 (used when StateValue has string indices)
+    if not isinstance(slot_index, int):
+        return COLORS["WHITE"]
+        
+    # Return a color from our palette based on slot index
+    # Use modulo to handle any number of state slots
+    color_index = slot_index % len(STATE_SLOT_COLORS)
+    return STATE_SLOT_COLORS[color_index]

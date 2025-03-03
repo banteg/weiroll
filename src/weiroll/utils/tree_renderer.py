@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from eth_utils import to_checksum_address
 
 from .formatters import format_value
-from .terminal_colors import colorize, get_color_mode
+from .terminal_colors import colorize, colorize_state_ref, get_color_mode
 
 # Tree drawing characters
 TREE_CHARS = {
@@ -211,7 +211,8 @@ def format_input_line(
 
         # Regular state reference
         elif isinstance(numeric_val, int):
-            state_ref = colorize(f"State[{numeric_val}]", "state_ref")
+            # Use state-based color coding
+            state_ref = colorize_state_ref(f"State[{numeric_val}]", numeric_val)
             
             if source_cmd >= 0:
                 # Show both source command and parameter role if available
@@ -336,8 +337,8 @@ def format_output_line(
         output_label_text = f"Output ({output_type})"
     output_label = colorize(output_label_text, "output_label")
     
-    # Colorize state reference
-    state_ref = colorize(f"State[{numeric_output_val}]", "state_ref")
+    # Colorize state reference with state-based coloring
+    state_ref = colorize_state_ref(f"State[{numeric_output_val}]", numeric_output_val)
 
     # Format the output line with colorization
     if usage_details:
