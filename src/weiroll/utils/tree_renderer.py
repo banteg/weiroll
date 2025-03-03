@@ -33,13 +33,17 @@ def render_tree(
         for input_idx, input_val in enumerate(inputs):
             # Track state usage for dependencies
             # Extract just the numeric part if input_val contains type information
-            numeric_input_val = input_val.split()[0] if isinstance(input_val, str) and " " in input_val else input_val
+            numeric_input_val = input_val
+            if isinstance(input_val, str) and " " in input_val:
+                numeric_input_val = input_val.split()[0]
+                
             try:
                 numeric_input_val = int(numeric_input_val)
                 if numeric_input_val < len(state):
-                    if input_val not in state_usage:
-                        state_usage[input_val] = []
-                    state_usage[input_val].append((i, input_idx))
+                    # Store the input value exactly as it appears in the command
+                    if numeric_input_val not in state_usage:
+                        state_usage[numeric_input_val] = []
+                    state_usage[numeric_input_val].append((i, input_idx))
             except (ValueError, TypeError):
                 # Skip if we can't convert to int
                 continue
@@ -47,11 +51,15 @@ def render_tree(
         outputs = command.get("outputs", [])
         for output_idx, state_idx in enumerate(outputs):
             # Extract just the numeric part if state_idx contains type information
-            numeric_state_idx = state_idx.split()[0] if isinstance(state_idx, str) and " " in state_idx else state_idx
+            numeric_state_idx = state_idx
+            if isinstance(state_idx, str) and " " in state_idx:
+                numeric_state_idx = state_idx.split()[0]
+                
             try:
                 numeric_state_idx = int(numeric_state_idx)
+                # Use the numeric index for the source mapping
                 if numeric_state_idx < len(state) + i + 1:  # Include output indices that may exceed state array
-                    state_sources[state_idx] = (i, output_idx)
+                    state_sources[numeric_state_idx] = (i, output_idx)
             except (ValueError, TypeError):
                 # Skip if we can't convert to int
                 continue
@@ -90,40 +98,38 @@ def render_tree(
             source_cmd = -1
             is_state_reference = False
             
-            if isinstance(input_val, int):
-                source_cmd, _ = state_sources.get(input_val, (-1, -1))
-                is_state_reference = source_cmd >= 0
-            
-            # Special handling for state placeholder (254 / 0xFE)
-            if isinstance(input_val, int) and input_val == 254:  # USE_STATE placeholder
-                input_lines.append(f"{prefix} Input {j}: <Current VM State>")
-                continue
-                
-            # Format state reference or direct value
-            if isinstance(input_val, int):
+            if isinstance(input_val, int) or (isinstance(input_val, str) and input_val.isdigit()):
+                # Convert to int for consistency
+                try:
+                    numeric_val = int(input_val)
+                except (ValueError, TypeError):
+                    numeric_val = input_val
+                    
                 # Special handling for negative indices (placeholders for state or subplans)
-                if input_val < 0:
+                if isinstance(numeric_val, int) and numeric_val < 0:
                     if "command_type" in command and command["command_type"] == "SUBPLAN":
-                        if input_val == -1:  # SUBPLAN_PLACEHOLDER
+                        if numeric_val == -1:  # SUBPLAN_PLACEHOLDER
                             input_lines.append(f"{prefix} Input {j}: <Subplan>")
                         else:
-                            input_lines.append(f"{prefix} Input {j}: <Special Value: {input_val}>")
+                            input_lines.append(f"{prefix} Input {j}: <Special Value: {numeric_val}>")
                     else:
-                        input_lines.append(f"{prefix} Input {j}: <Special Value: {input_val}>")
+                        input_lines.append(f"{prefix} Input {j}: <Special Value: {numeric_val}>")
                         
                 # Regular state reference
-                elif input_val < len(state):
-                    value_formatted = format_value(state[input_val])
-                    if is_state_reference:
-                        input_lines.append(f"{prefix} Input {j}: State[{input_val}] (from Command {source_cmd} output)")
+                elif isinstance(numeric_val, int) and numeric_val < len(state):
+                    value_formatted = format_value(state[numeric_val])
+                    source_cmd, _ = state_sources.get(numeric_val, (-1, -1))
+                    if source_cmd >= 0:
+                        input_lines.append(f"{prefix} Input {j}: State[{numeric_val}] (from Command {source_cmd} output)")
                     else:
-                        input_lines.append(f"{prefix} Input {j}: State[{input_val}] = {value_formatted}")
+                        input_lines.append(f"{prefix} Input {j}: State[{numeric_val}] = {value_formatted}")
                 else:
                     # Reference to state that is not part of initial state but computed during execution
-                    if is_state_reference:
-                        input_lines.append(f"{prefix} Input {j}: State[{input_val}] (from Command {source_cmd} output)")
+                    source_cmd, _ = state_sources.get(numeric_val, (-1, -1))
+                    if source_cmd >= 0:
+                        input_lines.append(f"{prefix} Input {j}: State[{numeric_val}] (from Command {source_cmd} output)")
                     else:
-                        input_lines.append(f"{prefix} Input {j}: State[{input_val}]")
+                        input_lines.append(f"{prefix} Input {j}: State[{numeric_val}]")
             else:
                 # Handle non-integer inputs (should be rare in the planner, more common in decoded plans)
                 input_lines.append(f"{prefix} Input {j}: {input_val}")
@@ -140,9 +146,33 @@ def render_tree(
                     if cmd_idx > i:  # Only look at commands after this one
                         cmd_inputs = cmd.get("inputs", [])
                         for input_idx, inp in enumerate(cmd_inputs):
-                            if isinstance(inp, int) and inp == output_val:
-                                used_in_commands.append(cmd_idx)
-                                break
+                            # Try different comparison approaches
+                            try:
+                                # Convert both to numeric values if possible
+                                numeric_inp = inp
+                                numeric_output = output_val
+                                
+                                # Handle string inputs with type info
+                                if isinstance(inp, str) and " " in inp:
+                                    numeric_inp = inp.split()[0]
+                                if isinstance(output_val, str) and " " in output_val:
+                                    numeric_output = output_val.split()[0]
+                                    
+                                # Convert to integers for comparison if possible
+                                try:
+                                    if int(numeric_inp) == int(numeric_output):
+                                        used_in_commands.append(cmd_idx)
+                                        break
+                                except (ValueError, TypeError):
+                                    # Direct string comparison if int conversion fails
+                                    if str(numeric_inp) == str(numeric_output):
+                                        used_in_commands.append(cmd_idx)
+                                        break
+                            except Exception:
+                                # Fallback to direct equality check
+                                if inp == output_val:
+                                    used_in_commands.append(cmd_idx)
+                                    break
                 
                 # Format the output line
                 if used_in_commands:

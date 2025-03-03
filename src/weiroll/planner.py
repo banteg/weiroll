@@ -128,16 +128,23 @@ class Planner:
                 state_index = self._add_to_state(arg, is_dynamic)
                 input_args.append(CommandArg(index=state_index, is_dynamic=is_dynamic))
 
-        # Check if the function has outputs
-        has_outputs = fn_call.method_abi.outputs and len(fn_call.method_abi.outputs) > 0
-
-        # Create output state value only if the function has outputs
+        # Find out if this call has output
         output = None
         output_arg = None
-        if has_outputs:
-            output_index = self.next_state_index
-            output = StateValue(output_index)
-            output_arg = CommandArg(index=output_index)
+
+        # Handle tuple return for raw_value() calls
+        if getattr(fn_call, 'is_tuple_return', False):
+            # For raw_value, we always create a state value with a bytes type
+            output_type = 'bytes'
+            output = StateValue(output_type, self.next_state_index)
+            output_arg = CommandArg(self.next_state_index)
+            self.next_state_index += 1
+        # Handle normal function outputs
+        elif fn_call.method_abi.outputs and len(fn_call.method_abi.outputs) > 0:
+            # Normal case - function has outputs defined in ABI
+            output_type = fn_call.method_abi.outputs[0].type
+            output = StateValue(output_type, self.next_state_index)
+            output_arg = CommandArg(self.next_state_index)
             self.next_state_index += 1
 
         # Create command
@@ -148,6 +155,7 @@ class Planner:
             output=output_arg,  # This might be None
             call_type=fn_call.call_type,
             command_type=CommandType.CALL,
+            is_tuple_return=getattr(fn_call, 'is_tuple_return', False),  # Get is_tuple_return flag if it exists
         )
 
         self.commands.append(command)

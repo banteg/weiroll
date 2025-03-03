@@ -241,6 +241,7 @@ class DummyFunctionCall:
         class DummyABIOutput:
             def __init__(self):
                 self.canonical_type = "bytes[]"
+                self.type = "bytes[]"  # Add type attribute to match actual ABI output format
                 
         class DummyFn:
             def __init__(self):

@@ -4,7 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from ape.contracts import Contract as ApeContract
+from ape import Contract as ApeContract
 from ape.contracts.base import _select_method_abi
 from eth_utils import to_bytes
 from eth_utils.crypto import keccak
@@ -79,6 +79,7 @@ class FunctionCall:
     fn: ContractFunction
     method_abi: MethodABI
     args: list[Any]
+    is_tuple_return: bool = False
 
     def with_value(self, value: int) -> "FunctionCall":
         new_fn = self.fn.with_value(value)
@@ -99,12 +100,10 @@ class FunctionCall:
         Returns:
             FunctionCall: A new FunctionCall that will capture the raw return value
         """
-        raise NotImplementedError()
         # Create a new function call with is_tuple_return set to True
         new_call = FunctionCall(self.fn, self.method_abi, self.args)
-        # This would modify the command to set the TUPLE_RETURN flag
-        # Implementation is not complete - would need to track this flag
-        # through to the Command object
+        # Set the tuple return flag
+        new_call.is_tuple_return = True
         return new_call
 
     @property

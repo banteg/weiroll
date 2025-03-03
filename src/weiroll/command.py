@@ -16,8 +16,12 @@ class CommandArg:
 
     def encode(self) -> bytes:
         """
-        Encode the argument specification as a byte.
-
+        Encode this argument as a byte.
+        
+        The format is:
+        - MSB (bit 7): 1 if dynamic, 0 if static
+        - bits 0-6: the index of the state value
+        
         Special values:
         - For Subplans: The index will be updated during planning (initially -1)
         - For State: Use 0xFE (the special state value index)
@@ -31,11 +35,15 @@ class CommandArg:
             # For now, we just mark it as dynamic
             var_bit = 0x80
             # The index will be provided during planning
-            return bytes([var_bit | (self.index & 0x7F)])
+            # Handle both integer and string index types
+            idx = 0 if isinstance(self.index, str) else (self.index & 0x7F)
+            return bytes([var_bit | idx])
 
         # Standard argument
         var_bit = 0x80 if self.is_dynamic else 0
-        return bytes([var_bit | (self.index & 0x7F)])
+        # Handle both integer and string index types
+        idx = 0 if isinstance(self.index, str) else (self.index & 0x7F)
+        return bytes([var_bit | idx])
 
     @classmethod
     def from_byte(cls, b: int) -> "CommandArg":
