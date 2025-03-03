@@ -37,22 +37,22 @@ __all__ = [
     # Enums and constants
     "ArgType",
     "CallType",
-    "CommandType",
     # Main classes
     "Command",
     "CommandArg",
+    "CommandType",
     "Contract",
     # Core components
     "ContractFunction",
     "DecodedCommand",
     "DecodedPlan",
     "Decoder",
+    # Exceptions
+    "EmptyABIError",
     "FunctionCall",
+    "InvalidContractError",
     "Planner",
     "StateValue",
     "SubplanValue",
-    # Exceptions
-    "EmptyABIError",
-    "InvalidContractError",
     "WeirollError",
 ]

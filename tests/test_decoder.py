@@ -2,8 +2,7 @@ import textwrap
 
 import ape
 
-from weiroll import Contract, Decoder, Planner, CallType
-
+from weiroll import CallType, Contract, Decoder, Planner
 
 # Define the expected output for the vault plan tree test
 expected_vault_plan_output = textwrap.dedent("""

@@ -1,8 +1,5 @@
-import pytest
-from ethpm_types import MethodABI
 
 from weiroll import CallType, Contract
-from weiroll.exceptions import EmptyABIError, InvalidContractError
 
 
 def test_ape_contract_adapter(math_contract):

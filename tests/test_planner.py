@@ -105,7 +105,7 @@ def test_planner_with_value_call(deposit_contract):
 def test_planner_with_extended_inputs(multi_function_contract):
     """Test planner with extended inputs (more than 6 arguments)."""
     planner = Planner()
-    contract = Contract(multi_function_contract)
+    Contract(multi_function_contract)
 
     # Create 10 inputs (more than the default 6 allowed in a standard command)
     inputs = []

@@ -1,4 +1,4 @@
-from weiroll import Contract, Planner, CallType
+from weiroll import CallType, Contract, Planner
 
 SAMPLE_ADDRESS = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 

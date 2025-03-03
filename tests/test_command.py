@@ -1,6 +1,6 @@
 from eth_utils import function_signature_to_4byte_selector, to_bytes
 
-from weiroll.command import Command, CommandArg, EXT_BIT
+from weiroll.command import EXT_BIT, Command, CommandArg
 from weiroll.constants import CallType
 
 

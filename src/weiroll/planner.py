@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Literal, Set
+from typing import Any, Set
 
 from ape import Contract as ApeContract
 from eth_abi import encode
@@ -40,20 +40,25 @@ class Planner:
     def _add_to_state(self, value: Any, is_dynamic: bool = False) -> int:
         """
         Add a value to the state and return its index.
-
+        
+        Performs deduplication by checking if the value already exists in the state.
+        If so, returns the existing index. Otherwise, adds the value to the state
+        and returns the new index.
+        
         Args:
-            value: The value to add to the state
+            value: The value to add (int, bool, str, bytes, list, etc.)
             is_dynamic: Whether the value is a dynamic type (string, bytes, array)
-
+                        that requires special handling during encoding
+        
         Returns:
-            int: The index of the value in the state array
+            int: Index of the value in the state array
         """
-        # Check if the value already exists in the state
-        # This implements literal deduplication
+        # Try to deduplicate values
         for i, existing_value in enumerate(self.state):
             if existing_value == value:
                 return i
-
+        
+        # Add value to state
         state_index = self.next_state_index
         self.state.append(value)
         self.next_state_index += 1
@@ -63,12 +68,21 @@ class Planner:
         """
         Add a function call to the plan and return a reference to its output in state.
 
+        This method processes the function call, validates arguments, creates the appropriate
+        command, and adds it to the planner's command list. If the function has outputs,
+        a state slot is allocated and a StateValue reference is returned. If the function 
+        has no outputs, None is returned.
+
         Args:
-            fn_call: The function call to add
+            fn_call: The function call to add to the plan
 
         Returns:
             StateValue: A reference to the function's output in the state, or None if the
                        function has no outputs.
+
+        Raises:
+            TypeError: If fn_call is not a FunctionCall instance
+            ValueError: If SubplanValue arguments are used (not allowed in regular add)
 
         Example:
             ```python
@@ -84,10 +98,15 @@ class Planner:
             planner.add(another_contract.process_token_transfer(result))
             ```
         """
+        # Validate input - ensure required attributes exist
+        for attr in ["selector", "target", "args", "method_abi", "call_type"]:
+            if not hasattr(fn_call, attr):
+                raise TypeError(f"Expected a FunctionCall-like object with '{attr}' attribute")
+
         # Check arguments for subplans (not allowed in regular add)
-        for arg in fn_call.args:
+        for i, arg in enumerate(fn_call.args):
             if isinstance(arg, SubplanValue):
-                raise ValueError("SubplanValue arguments can only be used with addSubplan")
+                raise ValueError(f"Argument {i}: SubplanValue arguments can only be used with addSubplan")
 
         # Process arguments
         input_args: list[CommandArg] = []
@@ -328,28 +347,32 @@ class Planner:
         except Exception as e:
             raise ValueError(f"Failed to encode subplan: {e}")
 
-    def plan(self) -> dict[Literal["commands", "state"], list[str]]:
+    def plan(self) -> dict[str, list[str]]:
         """
-        Generate the commands and state for VM execution.
-
+        Prepare the execution plan with all commands and state values.
+        
+        This method:
+        1. Builds the command bytecode for each command in the planner
+        2. Encodes all state values to their proper hex string representation
+        3. Combines everything into a format ready for VM execution
+        
         Returns:
-            dict: A dictionary with "commands" and "state" keys
-
+            dict: A dictionary with two keys:
+                - "commands": A list of hex strings representing encoded commands
+                - "state": A list of hex strings representing the initial state values
+                
         Example:
             ```python
             planner = Planner()
-            # Add function calls
-            plan = planner.plan()
-
-            # Access the encoded commands and state
-            commands = plan["commands"]
-            state = plan["state"]
+            # ... add function calls ...
+            
+            execution_plan = planner.plan()
+            # execution_plan = {
+            #     "commands": ["0x123...", "0x456..."],
+            #     "state": ["0xabc...", "0xdef..."]
+            # }
             ```
         """
-
-        # Track planners we've seen to detect circular references
-        seen_planners = set()
-
         encoded_commands = []
         encoded_state = []
 
@@ -361,7 +384,7 @@ class Planner:
                     raise ValueError("Subplan command missing subplan reference")
 
                 # Build and encode the subplan
-                encoded_subplan = self._build_subplan(cmd.subplan, seen_planners)
+                encoded_subplan = self._build_subplan(cmd.subplan, set())
 
                 # Add the encoded subplan to state
                 subplan_index = self._add_to_state(bytes.fromhex(encoded_subplan[2:]))
@@ -441,10 +464,10 @@ class Planner:
 
     def show_tree(self) -> str:
         """
-        Display the execution plan as a tree, showing data dependencies.
+        Generate a visual representation of the execution plan as a dependency tree.
 
         Returns:
-            str: A formatted string representation of the execution tree
+            str: A formatted string showing the execution plan as a tree
         """
         if not self.commands:
             return "Empty plan (no commands)"

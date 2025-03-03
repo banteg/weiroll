@@ -1,6 +1,5 @@
 import ape
 import pytest
-from ape import Contract as ApeContract
 from ape.contracts import ContractContainer
 from ethpm_types import ContractType
 
