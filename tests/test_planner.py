@@ -1,5 +1,6 @@
 from eth_utils import function_signature_to_4byte_selector, to_bytes
 
+from weiroll.command import Command, CommandArg
 from weiroll.constants import CallType
 from weiroll.contract import Contract, StateValue
 from weiroll.planner import Planner
@@ -97,16 +98,10 @@ def test_planner_with_value_call(deposit_contract):
 
 def test_planner_with_extended_inputs(multi_function_contract):
     """Test planner with extended inputs (more than 6 arguments)."""
-    # Create a Contract instance
-    contract = Contract(multi_function_contract)
-    
-    # Create a planner
     planner = Planner()
-    
-    # Create a command with 10 inputs to trigger extended inputs
-    from weiroll.command import Command, CommandArg
-    
-    # Create input arguments (10 of them)
+    contract = Contract(multi_function_contract)
+
+    # Create 10 inputs (more than the default 6 allowed in a standard command)
     inputs = []
     for i in range(10):
         state_index = planner._add_to_state(i)
@@ -127,24 +122,21 @@ def test_planner_with_extended_inputs(multi_function_contract):
     # Generate the plan
     plan = planner.plan()
     
-    # Check that we got two commands (original + extended inputs)
-    assert len(plan["commands"]) == 2
+    # With new format, we should have only one command that's encoded as 64 bytes
+    assert len(plan["commands"]) == 1
     
-    # Verify the extended inputs command follows the main command
-    main_cmd = Command.decode(plan["commands"][0])
-    ext_cmd = Command.decode(plan["commands"][1])
+    # Verify the command is correctly encoded
+    decoded_cmd = Command.decode(bytes.fromhex(plan["commands"][0][2:]))  # Remove '0x' prefix
     
-    # Check the main command has the EXT_BIT flag set
-    assert main_cmd.extended_inputs == True
+    # Check the command has the EXT_BIT flag set
+    assert decoded_cmd.extended_inputs == True
     
-    # Check the extended inputs command has the special marker
-    assert ext_cmd.function_selector == b"\xFF\xFF\xFF\xFF"
+    # Check it has the right number of inputs
+    assert len(decoded_cmd.inputs) == 10
     
-    # Check the extended inputs command has the right number of inputs
-    assert len(ext_cmd.inputs) == 4  # Should have inputs 6-9
+    # Check that the inputs are properly preserved
+    for i, input_arg in enumerate(decoded_cmd.inputs):
+        assert input_arg.index == inputs[i].index
     
-    # We can't fully test the decoder because it tries to look up contract info
-    # Just verify the raw command fields directly
-    assert len(main_cmd.inputs) > 6  # With our dummy inputs added
-    assert ext_cmd.function_selector == b"\xFF\xFF\xFF\xFF"
-    assert len(ext_cmd.inputs) == 4  # 4 extended inputs
+    # Check output is correct
+    assert decoded_cmd.output.index == 10

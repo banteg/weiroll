@@ -1,6 +1,6 @@
 from eth_utils import function_signature_to_4byte_selector, to_bytes
 
-from weiroll.command import Command, CommandArg
+from weiroll.command import Command, CommandArg, EXT_BIT
 from weiroll.constants import CallType
 
 
@@ -39,9 +39,8 @@ def test_command_encoding():
     )
 
     encoded = cmd.encode()
-    assert isinstance(encoded, list)
-    assert len(encoded) == 1  # For regular commands, list has 1 element
-    assert len(encoded[0]) == 32  # The command itself must be 32 bytes
+    assert isinstance(encoded, bytes)
+    assert len(encoded) == 32  # The command itself must be 32 bytes
 
     # Decode and verify
     decoded = Command.decode(encoded)
@@ -90,51 +89,51 @@ def test_command_with_calltype():
 
 
 def test_command_with_extended_inputs():
-    # Create a command with more than 6 inputs
-    selector = function_signature_to_4byte_selector("complexFunction(uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)")
-    target = to_bytes(hexstr="0x1234567890123456789012345678901234567890")
+    """Test encoding and decoding a command with more than 6 inputs."""
+    # Create a command with 8 inputs (exceeding the standard 6)
+    selector = bytes.fromhex("12345678")
+    target = bytes.fromhex("1111111111111111111122222222222222222222")
     
-    # Create 8 inputs (more than the 6 allowed in a single command)
+    # Create 8 inputs
     inputs = [CommandArg(index=i) for i in range(8)]
-    
-    # Output at state index 10
-    output = CommandArg(index=10)
     
     cmd = Command(
         function_selector=selector,
         target=target,
         inputs=inputs,
-        output=output
+        output=CommandArg(index=10),
+        call_type=CallType.CALL,
     )
     
-    # Verify this is an extended inputs command
+    # The command should use extended encoding
     assert cmd.extended_inputs
     
     # Encode the command
     encoded = cmd.encode()
     
-    # Verify the encoding produced a list with 2 elements
-    assert isinstance(encoded, list)
-    assert len(encoded) == 2
-    assert len(encoded[0]) == 32  # Main command is 32 bytes
-    assert len(encoded[1]) == 32  # Extended inputs command is 32 bytes
+    # Extended command should be 64 bytes (two 32-byte words)
+    assert isinstance(encoded, bytes)
+    assert len(encoded) == 64
     
-    # The first 4 bytes of the extended inputs command should be the special marker
-    assert encoded[1][0:4] == b"\xFF\xFF\xFF\xFF"
-    # The 5th byte should be the number of extended inputs (2 in this case)
-    assert encoded[1][4] == 2
+    # Verify the extended flag is set in the encoded command
+    assert (encoded[4] & EXT_BIT) != 0
     
-    # Now decode the command
+    # For extended commands, the 6 bytes after the flags should be zeros
+    for i in range(5, 11):
+        assert encoded[i] == 0
+    
+    # Decode the command
     decoded = Command.decode(encoded)
     
-    # Verify the decoded command matches the original
+    # Verify all properties are preserved
     assert decoded.function_selector == selector
     assert decoded.target == target
-    assert len(decoded.inputs) == 8  # Should have all 8 inputs
+    assert len(decoded.inputs) == 8
+    assert decoded.extended_inputs
     
-    # Check all input indices are correct
+    # Check that all input indices were preserved
     for i, arg in enumerate(decoded.inputs):
-        assert arg.index == i
+        assert arg.index == inputs[i].index
     
-    # Check output index
+    # Verify output
     assert decoded.output.index == 10
