@@ -1,48 +1,38 @@
 #!/usr/bin/env python
 """
-Tests the fix for the planner visualization issue with approve function.
+Tests the enhanced planner visualization with improved command dependencies
+and contract information display.
 
-This script demonstrates the correct visualization of command dependencies
-in weiroll by running the example that previously had issues.
+This script demonstrates the enhanced tree visualization features in weiroll.
 """
-from ape import accounts, networks
+from ape import accounts, networks, Contract as ApeContract
 from ape_tokens import tokens
 import weiroll
 
 def main():
-    """Run test for fixed command visualization"""
+    """Run test for enhanced command visualization"""
     with networks.parse_network_choice('ethereum:mainnet:http://127.0.0.1:8545'):
-        print("=== Testing Improved Command Visualization ===")
+        print("=== Testing Enhanced Tree Visualization ===")
         
         # Set up the test contracts and accounts
         token = weiroll.Contract(tokens['DAI'])
+        # Use a direct address for the yearn vault
+        vault_address = "0xdA816459F1AB5631232FE5e97a05BBBb94970c95"  # yvDAI vault
+        vault = weiroll.Contract(ApeContract(vault_address))
         dev = accounts.test_accounts[0]
         recipient = accounts.test_accounts[1]
         
-        print("\nTest 1: The original issue case")
+        print("\nExample: Vault Deposit Flow with Contract Names")
         planner = weiroll.Planner()
+        
+        # Create a balanced deposit flow using multiple contracts
         amount = planner.add(token.balanceOf(str(dev)))
-        planner.add(token.approve(str(recipient), amount))
+        planner.add(token.approve(str(vault.address), amount))
+        shares = planner.add(vault.deposit(amount, str(dev)))
         
-        # Print the commands to help debug
-        print("\nCommand structure:")
-        for i, cmd in enumerate(planner.commands):
-            print(f"Command {i}:")
-            print(f"  Inputs: {[getattr(arg, 'index', 'unknown') for arg in cmd.inputs]}")
-            if cmd.output:
-                print(f"  Output: index={cmd.output.index}")
-            else:
-                print("  Output: None")
-        
-        # Show tree with fixed visualization
-        print("\nCommand Tree (fixed):")
+        # Show tree with enhanced visualization
+        print("\nEnhanced Command Tree:")
         print(planner.show_tree())
         
-        # Print the plan for reference
-        plan = planner.plan()
-        print("\nEncoded Plan:")
-        for key, value in plan.items():
-            print(f"{key}: {value}")
-
 if __name__ == "__main__":
     main()

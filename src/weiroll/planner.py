@@ -528,6 +528,7 @@ class Planner:
                 # Try to extract the function name from the 4byte selector (legacy approach)
                 fn_name = f"function({selector_hex})"  # Default if lookup fails
 
+                contract_name = ""
                 try:
                     # Try to look up with Contract class from ape (if available)
                     contract = ApeContract(target_address)
@@ -535,6 +536,23 @@ class Planner:
                     # Try to get the signature from the contract's identifier_lookup
                     if hasattr(contract, "identifier_lookup") and selector_hex in contract.identifier_lookup:
                         fn_name = contract.identifier_lookup[selector_hex].signature
+                    
+                    # Try to get the contract name
+                    if hasattr(contract, "contract_type") and contract.contract_type.name:
+                        contract_name = contract.contract_type.name
+                    # If contract_type.name is not available, try the name() function
+                    elif hasattr(contract, "name") and callable(contract.name):
+                        try:
+                            # Try to call name() but catch exceptions
+                            contract_name = contract.name.call()
+                        except Exception:
+                            # name() call failed, try with symbol() as fallback
+                            if hasattr(contract, "symbol") and callable(contract.symbol):
+                                try:
+                                    # Try to get symbol as a fallback for name
+                                    contract_name = contract.symbol.call()
+                                except Exception:
+                                    pass
                 except Exception:
                     # If ape is not available or there's an error, use the default
                     pass
@@ -547,6 +565,7 @@ class Planner:
                 "inputs": [arg.index for arg in cmd.inputs],
                 "outputs": [cmd.output.index] if cmd.output and cmd.output.index != ArgType.USE_STATE else [],
                 "command_type": cmd.command_type.name,
+                "contract_name": contract_name,  # Add contract name if available
             }
             
             # Add source tracking info for command inputs

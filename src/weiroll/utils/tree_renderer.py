@@ -7,10 +7,11 @@ from .terminal_colors import colorize, get_color_mode
 
 # Tree drawing characters
 TREE_CHARS = {
-    "branch": "  ├─",  # For most items in a list
-    "last": "  └─",  # For the last item in a list
-    "vertical": "  │ ",  # Vertical continuation
-    "empty": "    ",  # Empty space
+    "branch": "    ├─",  # For most items in a list
+    "last": "    └─",  # For the last item in a list
+    "vertical": "    │ ",  # Vertical continuation
+    "empty": "      ",  # Empty space
+    "contract_indent": "  ",  # Indentation for contract info line
 }
 
 
@@ -84,7 +85,7 @@ def format_command_header(command: Dict[str, Any], index: int, call_type: str) -
         call_type: The call type (e.g., "CALL", "DELEGATECALL")
 
     Returns:
-        Formatted header string
+        Formatted header string (possibly multiline)
     """
     # Format target address
     target = command.get("to", "0x0000000000000000000000000000000000000000")
@@ -93,13 +94,15 @@ def format_command_header(command: Dict[str, Any], index: int, call_type: str) -
     # Format function signature
     function_formatted = command.get("function", f"function({command.get('selector', '0x00000000')})")
 
+    # Get contract name if available
+    contract_name = command.get("contract_name", "")
+
     # Colorize based on call type
     color_key = f"command_header_{call_type.lower()}" if call_type.lower() in ["call", "staticcall", "delegatecall"] else "command_header"
     
     # Get parts to colorize separately
     command_index = f"Command {index}"
     function_part = function_formatted
-    address_part = f"@ {target_formatted}"
     type_part = f"[{call_type}"
     
     # Handle command type
@@ -112,10 +115,23 @@ def format_command_header(command: Dict[str, Any], index: int, call_type: str) -
     # Colorize each part
     colored_command_index = colorize(command_index, color_key)
     colored_function = colorize(function_part, "function_name")
-    colored_address = colorize(address_part, "address") 
     colored_type = colorize(type_part, color_key)
     
-    return f"{colored_command_index}: {colored_function} {colored_address} {colored_type}"
+    # Format contract name and address
+    contract_line = ""
+    contract_indent = TREE_CHARS["contract_indent"]
+    if contract_name:
+        # Show both name and address
+        colored_name = colorize(contract_name, "function_name")
+        colored_address = colorize(target_formatted, "address")
+        contract_line = f"\n{contract_indent}{colored_name} @ {colored_address}"
+    else:
+        # Just show address on its own line
+        colored_address = colorize(target_formatted, "address")
+        contract_line = f"\n{contract_indent}@ {colored_address}"
+    
+    # Return a multi-line header with function on first line, contract info on second
+    return f"{colored_command_index}: {colored_function} {colored_type}{contract_line}"
 
 
 def format_input_line(
