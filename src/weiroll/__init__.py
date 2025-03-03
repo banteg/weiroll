@@ -29,7 +29,7 @@ with Planner() as planner:
 from .command import Command, CommandArg
 from .constants import ArgType, CallType, CommandType
 from .contract import Contract, ContractFunction, FunctionCall, StateValue, SubplanValue
-from .decoder import DecodedCommand, DecodedPlan, Decoder
+from .decoder import Decoder
 from .exceptions import EmptyABIError, InvalidContractError, WeirollError
 from .planner import Planner
 
@@ -44,8 +44,6 @@ __all__ = [
     "Contract",
     # Core components
     "ContractFunction",
-    "DecodedCommand",
-    "DecodedPlan",
     "Decoder",
     # Exceptions
     "EmptyABIError",

@@ -93,10 +93,10 @@ def test_command_with_extended_inputs():
     # Create a command with 8 inputs (exceeding the standard 6)
     selector = bytes.fromhex("12345678")
     target = bytes.fromhex("1111111111111111111122222222222222222222")
-    
+
     # Create 8 inputs
     inputs = [CommandArg(index=i) for i in range(8)]
-    
+
     cmd = Command(
         function_selector=selector,
         target=target,
@@ -104,36 +104,36 @@ def test_command_with_extended_inputs():
         output=CommandArg(index=10),
         call_type=CallType.CALL,
     )
-    
+
     # The command should use extended encoding
     assert cmd.extended_inputs
-    
+
     # Encode the command
     encoded = cmd.encode()
-    
+
     # Extended command should be 64 bytes (two 32-byte words)
     assert isinstance(encoded, bytes)
     assert len(encoded) == 64
-    
+
     # Verify the extended flag is set in the encoded command
     assert (encoded[4] & EXT_BIT) != 0
-    
+
     # For extended commands, the 6 bytes after the flags should be zeros
     for i in range(5, 11):
         assert encoded[i] == 0
-    
+
     # Decode the command
     decoded = Command.decode(encoded)
-    
+
     # Verify all properties are preserved
     assert decoded.function_selector == selector
     assert decoded.target == target
     assert len(decoded.inputs) == 8
     assert decoded.extended_inputs
-    
+
     # Check that all input indices were preserved
     for i, arg in enumerate(decoded.inputs):
         assert arg.index == inputs[i].index
-    
+
     # Verify output
     assert decoded.output.index == 10

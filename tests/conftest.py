@@ -193,18 +193,13 @@ def executor_contract():
         {
             "type": "function",
             "name": "execute",
-            "inputs": [
-                {"name": "commands", "type": "bytes32[]"}, 
-                {"name": "state", "type": "bytes[]"}
-            ],
+            "inputs": [{"name": "commands", "type": "bytes32[]"}, {"name": "state", "type": "bytes[]"}],
             "outputs": [{"name": "newState", "type": "bytes[]"}],
         },
         {
             "type": "function",
             "name": "processState",
-            "inputs": [
-                {"name": "state", "type": "bytes[]"}
-            ],
+            "inputs": [{"name": "state", "type": "bytes[]"}],
             "outputs": [{"name": "newState", "type": "bytes[]"}],
         },
     ]
@@ -213,7 +208,7 @@ def executor_contract():
 
 def create_ape_contract(address, abi):
     """Create an Ape contract with custom ABI"""
-    # Create a ContractType with the given ABI 
+    # Create a ContractType with the given ABI
     contract_type = ContractType(abi=abi, contractName="TestContract")
 
     # Create a ContractContainer with the contract type

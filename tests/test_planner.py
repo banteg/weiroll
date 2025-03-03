@@ -27,7 +27,7 @@ def test_planner_basic(simple_contract):
     assert cmd.function_selector == function_signature_to_4byte_selector("add(uint256,uint256)")
     assert cmd.target == to_bytes(hexstr=simple_contract.address)
     assert len(cmd.inputs) == 2
-    
+
     # Check the index values - they might be integers or strings depending on implementation
     if isinstance(cmd.inputs[0].index, int):
         assert cmd.inputs[0].index == 0
@@ -123,38 +123,40 @@ def test_planner_with_extended_inputs(multi_function_contract):
     for i in range(10):
         state_index = planner._add_to_state(i)
         inputs.append(CommandArg(index=state_index))
-    
+
     # Create a command with the extended inputs
     command = Command(
-        function_selector=function_signature_to_4byte_selector("test(uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"),
+        function_selector=function_signature_to_4byte_selector(
+            "test(uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"
+        ),
         target=to_bytes(hexstr=multi_function_contract.address),
         inputs=inputs,
         output=CommandArg(index=10),
         call_type=CallType.CALL,
     )
-    
+
     # Add the command to the planner
     planner.commands.append(command)
-    
+
     # Generate the plan
     plan = planner.plan()
-    
+
     # With new format, we should have only one command that's encoded as 64 bytes
     assert len(plan["commands"]) == 1
-    
+
     # Verify the command is correctly encoded
     decoded_cmd = Command.decode(bytes.fromhex(plan["commands"][0][2:]))  # Remove '0x' prefix
-    
+
     # Check the command has the EXT_BIT flag set
     assert decoded_cmd.extended_inputs
-    
+
     # Check it has the right number of inputs
     assert len(decoded_cmd.inputs) == 10
-    
+
     # Check that the inputs are properly preserved
     for i, input_arg in enumerate(decoded_cmd.inputs):
         assert input_arg.index == inputs[i].index
-    
+
     # Check output is correct
     assert decoded_cmd.output.index == 10
 
@@ -183,7 +185,7 @@ def test_planner_with_no_output_functions(deposit_contract):
     # Verify the command
     assert len(planner.commands) == 1
     cmd = planner.commands[0]
-    
+
     # Verify the command's output is None if the function has no outputs
     if not has_outputs:
         assert cmd.output is None
@@ -195,7 +197,7 @@ def test_planner_with_no_output_functions(deposit_contract):
 
     # Verify the encoded plan
     assert len(plan["commands"]) == 1
-    
+
     # If no outputs, state should only have the arguments (if any)
     expected_state_entries = 0  # No inputs
     assert len(plan["state"]) == expected_state_entries

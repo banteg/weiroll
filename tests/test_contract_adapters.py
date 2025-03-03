@@ -1,4 +1,3 @@
-
 from weiroll import CallType, Contract
 
 

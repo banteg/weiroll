@@ -40,16 +40,16 @@ class Planner:
     def _add_to_state(self, value: Any, is_dynamic: bool = False) -> int:
         """
         Add a value to the state and return its index.
-        
+
         Performs deduplication by checking if the value already exists in the state.
         If so, returns the existing index. Otherwise, adds the value to the state
         and returns the new index.
-        
+
         Args:
             value: The value to add (int, bool, str, bytes, list, etc.)
             is_dynamic: Whether the value is a dynamic type (string, bytes, array)
                         that requires special handling during encoding
-        
+
         Returns:
             int: Index of the value in the state array
         """
@@ -57,7 +57,7 @@ class Planner:
         for i, existing_value in enumerate(self.state):
             if existing_value == value:
                 return i
-        
+
         # Add value to state
         state_index = self.next_state_index
         self.state.append(value)
@@ -70,7 +70,7 @@ class Planner:
 
         This method processes the function call, validates arguments, creates the appropriate
         command, and adds it to the planner's command list. If the function has outputs,
-        a state slot is allocated and a StateValue reference is returned. If the function 
+        a state slot is allocated and a StateValue reference is returned. If the function
         has no outputs, None is returned.
 
         Args:
@@ -133,9 +133,9 @@ class Planner:
         output_arg = None
 
         # Handle tuple return for raw_value() calls
-        if getattr(fn_call, 'is_tuple_return', False):
+        if getattr(fn_call, "is_tuple_return", False):
             # For raw_value, we always create a state value with a bytes type
-            output_type = 'bytes'
+            output_type = "bytes"
             output = StateValue(output_type, self.next_state_index)
             output_arg = CommandArg(self.next_state_index)
             self.next_state_index += 1
@@ -155,7 +155,7 @@ class Planner:
             output=output_arg,  # This might be None
             call_type=fn_call.call_type,
             command_type=CommandType.CALL,
-            is_tuple_return=getattr(fn_call, 'is_tuple_return', False),  # Get is_tuple_return flag if it exists
+            is_tuple_return=getattr(fn_call, "is_tuple_return", False),  # Get is_tuple_return flag if it exists
         )
 
         self.commands.append(command)
@@ -192,7 +192,7 @@ class Planner:
         for attr in ["args", "call_type", "fn"]:
             if not hasattr(fn_call, attr):
                 raise TypeError(f"Expected a FunctionCall-like object with '{attr}' attribute")
-                
+
         # Check for subplan and state arguments
         has_subplan = False
         has_state = False
@@ -360,22 +360,22 @@ class Planner:
     def plan(self) -> dict[str, list[str]]:
         """
         Prepare the execution plan with all commands and state values.
-        
+
         This method:
         1. Builds the command bytecode for each command in the planner
         2. Encodes all state values to their proper hex string representation
         3. Combines everything into a format ready for VM execution
-        
+
         Returns:
             dict: A dictionary with two keys:
                 - "commands": A list of hex strings representing encoded commands
                 - "state": A list of hex strings representing the initial state values
-                
+
         Example:
             ```python
             planner = Planner()
             # ... add function calls ...
-            
+
             execution_plan = planner.plan()
             # execution_plan = {
             #     "commands": ["0x123...", "0x456..."],
@@ -490,19 +490,23 @@ class Planner:
             target_address = "0x" + cmd.target.hex()[-40:]
             selector_hex = "0x" + cmd.function_selector.hex()
 
-            # Try to extract the function name from the 4byte selector
-            fn_name = f"function({selector_hex})"  # Default if lookup fails
+            # Check if command has function_info from decoder
+            if hasattr(cmd, "function_info") and cmd.function_info:
+                fn_name = cmd.function_info.get("signature") or f"function({selector_hex})"
+            else:
+                # Try to extract the function name from the 4byte selector (legacy approach)
+                fn_name = f"function({selector_hex})"  # Default if lookup fails
 
-            try:
-                # Try to look up with Contract class from ape (if available)
-                contract = ApeContract(target_address)
+                try:
+                    # Try to look up with Contract class from ape (if available)
+                    contract = ApeContract(target_address)
 
-                # Try to get the signature from the contract's identifier_lookup
-                if hasattr(contract, "identifier_lookup") and selector_hex in contract.identifier_lookup:
-                    fn_name = contract.identifier_lookup[selector_hex].signature
-            except Exception:
-                # If ape is not available or there's an error, use the default
-                pass
+                    # Try to get the signature from the contract's identifier_lookup
+                    if hasattr(contract, "identifier_lookup") and selector_hex in contract.identifier_lookup:
+                        fn_name = contract.identifier_lookup[selector_hex].signature
+                except Exception:
+                    # If ape is not available or there's an error, use the default
+                    pass
 
             # Format command for renderer
             commands_for_renderer.append(

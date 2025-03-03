@@ -13,7 +13,7 @@ class CallType(IntEnum):
 class CommandType(IntEnum):
     """
     Type of command to execute.
-    
+
     CALL: Standard function call
     RAWCALL: Call that replaces planner state with return value
     SUBPLAN: Execute a nested planner
