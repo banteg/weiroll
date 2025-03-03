@@ -165,7 +165,9 @@ def format_input_line(
     return f"{prefix} Input {input_index}: {format_value(input_val)}"
 
 
-def format_output_line(output_val: Any, command_index: int, state_usage: Dict[int, List[Tuple[int, int]]]) -> str:
+def format_output_line(
+    output_val: Any, command_index: int, state_usage: Dict[int, List[Tuple[int, int]]], commands: List[Dict[str, Any]]
+) -> str:
     """
     Format the output line for the command.
 
@@ -173,6 +175,7 @@ def format_output_line(output_val: Any, command_index: int, state_usage: Dict[in
         output_val: The output value
         command_index: Index of this command
         state_usage: Maps state index to commands that use it as input
+        commands: List of all commands in the plan
 
     Returns:
         Formatted output line
@@ -187,27 +190,72 @@ def format_output_line(output_val: Any, command_index: int, state_usage: Dict[in
     except (ValueError, TypeError):
         numeric_output_val = output_val
 
+    # Extract output type if available
+    output_type = ""
+    if isinstance(output_val, str) and " " in output_val:
+        parts = output_val.split(" ", 1)
+        if len(parts) > 1:
+            output_type = parts[1].strip()
+
     # Find if this output is used by commands in the state_usage map
-    used_in_commands = []
+    usage_details = []
     if numeric_output_val in state_usage:
-        for cmd_idx, _ in state_usage[numeric_output_val]:
+        for cmd_idx, input_idx in state_usage[numeric_output_val]:
             # Only consider future commands (after this one)
             if cmd_idx > command_index:
-                used_in_commands.append(cmd_idx)
+                # Get the function name and parameter name if possible
+                if cmd_idx < len(commands):
+                    cmd = commands[cmd_idx]
+                    function_name = cmd.get("function", "")
+                    # Extract the base function name
+                    if "(" in function_name:
+                        function_name = function_name.split("(")[0]
 
-    # Sort the commands to get the earliest one first
-    used_in_commands.sort()
+                    # Try to get parameter name - this is a simplification and could be improved
+                    param_name = f"param{input_idx}"
+
+                    # If we have a function signature, try to extract parameter names
+                    function_sig = cmd.get("function", "")
+                    if "(" in function_sig and ")" in function_sig:
+                        # Extract parameters section from the signature
+                        params_section = function_sig.split("(")[1].split(")")[0]
+                        params = params_section.split(",")
+                        if input_idx < len(params):
+                            # Check if parameter has a name
+                            param = params[input_idx].strip()
+                            if " " in param:
+                                param_name = param.split(" ")[0]
+
+                    usage_details.append((cmd_idx, function_name, param_name))
+                else:
+                    usage_details.append((cmd_idx, "", f"param{input_idx}"))
+
+    # Sort by command index
+    usage_details.sort()
 
     # Format the output line
-    if used_in_commands:
-        if len(used_in_commands) == 1:
-            next_cmd = used_in_commands[0]
-            return f"{TREE_CHARS['last']} Output: State[{output_val}] (→ Command {next_cmd})"
+    output_prefix = f"{TREE_CHARS['last']} Output: "
+    if output_type:
+        output_prefix = f"{TREE_CHARS['last']} Output ({output_type}): "
+
+    if usage_details:
+        if len(usage_details) == 1:
+            cmd_idx, fn_name, param_name = usage_details[0]
+            if fn_name and param_name:
+                return f"{output_prefix}State[{numeric_output_val}] → Command {cmd_idx} ({fn_name}.{param_name})"
+            else:
+                return f"{output_prefix}State[{numeric_output_val}] → Command {cmd_idx}"
         else:
-            cmd_refs = ", ".join([str(cmd) for cmd in used_in_commands])
-            return f"{TREE_CHARS['last']} Output: State[{output_val}] (→ Commands {cmd_refs})"
+            # Multiple usages
+            usage_strs = []
+            for cmd_idx, fn_name, param_name in usage_details:
+                if fn_name and param_name:
+                    usage_strs.append(f"Command {cmd_idx} ({fn_name}.{param_name})")
+                else:
+                    usage_strs.append(f"Command {cmd_idx}")
+            return f"{output_prefix}State[{numeric_output_val}] → " + ", ".join(usage_strs)
     else:
-        return f"{TREE_CHARS['last']} Output: State[{output_val}] (unused in future commands)"
+        return f"{output_prefix}State[{numeric_output_val}] (unused in future commands)"
 
 
 def render_tree(
@@ -256,7 +304,7 @@ def render_tree(
         # Format outputs
         if outputs:
             for output_val in outputs:
-                lines.append(format_output_line(output_val, i, state_usage))
+                lines.append(format_output_line(output_val, i, state_usage, commands))
 
         # Add an empty line between commands
         if i < len(commands) - 1:
