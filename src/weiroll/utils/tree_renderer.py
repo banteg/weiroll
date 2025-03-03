@@ -216,12 +216,23 @@ def format_output_line(
 
                     # If we have a function signature, try to extract parameter names
                     function_sig = cmd.get("function", "")
-                    if "(" in function_sig and ")" in function_sig:
-                        # Extract parameters section from the signature
+                    if hasattr(cmd, "function_info") and cmd.function_info:
+                        # Try to get parameter names from the function signature in function_info
+                        signature = cmd.function_info.get("signature", "")
+                        if signature and "(" in signature and ")" in signature:
+                            # Extract parameters section from the signature
+                            params_section = signature.split("(")[1].split(")")[0]
+                            params = params_section.split(",")
+                            if input_idx < len(params):
+                                param = params[input_idx].strip()
+                                if " " in param:
+                                    # Extract the parameter name from "address receiver" -> "receiver"
+                                    param_name = param.split(" ")[1] if len(param.split(" ")) > 1 else param.split(" ")[0]
+                    elif "(" in function_sig and ")" in function_sig:
+                        # Fallback to original function signature if function_info not available
                         params_section = function_sig.split("(")[1].split(")")[0]
                         params = params_section.split(",")
                         if input_idx < len(params):
-                            # Check if parameter has a name
                             param = params[input_idx].strip()
                             if " " in param:
                                 param_name = param.split(" ")[0]
