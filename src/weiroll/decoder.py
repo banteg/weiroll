@@ -1,12 +1,13 @@
 import logging
 from functools import lru_cache
-from typing import Any, Dict, Union
+from typing import Any, Dict, Optional, Union
 
 from ape import Contract as ApeContract
 from eth_utils import function_signature_to_4byte_selector, to_checksum_address, to_hex
 
 from .command import Command, CommandArg
 from .planner import Planner
+from .utils.terminal_colors import get_color_mode
 
 # Set up logger without forcing handlers or levels
 logger = logging.getLogger("weiroll.decoder")
@@ -153,7 +154,12 @@ class Decoder:
         return cmd
 
     @staticmethod
-    def decode_plan(commands: list[Union[str, bytes]], state: list[str], lookup_function_info: bool = True) -> Planner:
+    def decode_plan(
+        commands: list[Union[str, bytes]], 
+        state: list[str], 
+        lookup_function_info: bool = True,
+        use_color: Optional[bool] = None
+    ) -> Planner:
         """
         Decode a full Weiroll plan into an enhanced Planner object.
 
@@ -161,6 +167,7 @@ class Decoder:
             commands: List of command data (bytes32 or hex strings)
             state: List of state values
             lookup_function_info: Whether to try to lookup additional function info
+            use_color: Whether to use colors in the tree visualization (None for auto-detection)
 
         Returns:
             Planner: An enhanced Planner object with decoded metadata
@@ -258,16 +265,21 @@ class Decoder:
         # Add a method to get tree representation without overriding __str__
         from types import MethodType
 
-        # Add a decoded_str method instead of overriding __str__
-        planner.decoded_str = MethodType(lambda self: self.show_tree(), planner)
+        # Add a decoded_str method that passes the color parameter
+        def decoded_str(self, use_color: Optional[bool] = None):
+            return self.show_tree(use_color=use_color)
+            
+        planner.decoded_str = MethodType(decoded_str, planner)
 
-        # Optionally, we could still override __str__ but in a cleaner way:
+        # Save the original __str__ method
         original_str = planner.__str__
         planner._original_str = original_str  # Save original for reference
 
-        # Define a safer __str__ that delegates to show_tree
-        def enhanced_str(self):
-            return self.show_tree()
+        # Define a safer __str__ that delegates to show_tree with auto color detection or specified value
+        def enhanced_str(self, use_color: Optional[bool] = None):
+            # Use the color value passed to decode_plan if not explicitly overridden
+            color_val = use_color if use_color is not None else use_color 
+            return self.show_tree(use_color=color_val)
 
         planner.__str__ = MethodType(enhanced_str, planner)
 

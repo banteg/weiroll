@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Set
+from typing import Any, Optional, Set
 
 from ape import Contract as ApeContract
 from eth_abi import encode
@@ -472,9 +472,13 @@ class Planner:
         """Return a string representation of the planner."""
         return f"Planner(commands={len(self.commands)}, state_size={len(self.state)})"
 
-    def show_tree(self) -> str:
+    def show_tree(self, use_color: Optional[bool] = None) -> str:
         """
         Generate a visual representation of the execution plan as a dependency tree.
+
+        Args:
+            use_color: Whether to use colors in the output. None for auto-detection,
+                       True to force colors, False to disable colors.
 
         Returns:
             str: A formatted string showing the execution plan as a tree
@@ -527,4 +531,4 @@ class Planner:
                 call_types.append(CallType(cmd.call_type).name)
 
         # Use the common renderer
-        return render_tree(commands_for_renderer, self.state, call_types)
+        return render_tree(commands_for_renderer, self.state, call_types, use_color=use_color)

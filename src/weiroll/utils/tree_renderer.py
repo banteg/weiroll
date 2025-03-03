@@ -1,8 +1,9 @@
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from eth_utils import to_checksum_address
 
 from .formatters import format_value
+from .terminal_colors import colorize, get_color_mode
 
 # Tree drawing characters
 TREE_CHARS = {
@@ -92,12 +93,29 @@ def format_command_header(command: Dict[str, Any], index: int, call_type: str) -
     # Format function signature
     function_formatted = command.get("function", f"function({command.get('selector', '0x00000000')})")
 
+    # Colorize based on call type
+    color_key = f"command_header_{call_type.lower()}" if call_type.lower() in ["call", "staticcall", "delegatecall"] else "command_header"
+    
+    # Get parts to colorize separately
+    command_index = f"Command {index}"
+    function_part = function_formatted
+    address_part = f"@ {target_formatted}"
+    type_part = f"[{call_type}"
+    
     # Handle command type
     command_type = command.get("command_type", "CALL")
     if command_type != "CALL":
-        return f"Command {index}: {function_formatted} @ {target_formatted} [{call_type}, {command_type}]"
+        type_part += f", {command_type}]"
     else:
-        return f"Command {index}: {function_formatted} @ {target_formatted} [{call_type}]"
+        type_part += "]"
+        
+    # Colorize each part
+    colored_command_index = colorize(command_index, color_key)
+    colored_function = colorize(function_part, "function_name")
+    colored_address = colorize(address_part, "address") 
+    colored_type = colorize(type_part, color_key)
+    
+    return f"{colored_command_index}: {colored_function} {colored_address} {colored_type}"
 
 
 def format_input_line(
@@ -125,7 +143,12 @@ def format_input_line(
         Formatted input line
     """
     # Determine the tree character to use
-    prefix = TREE_CHARS["last"] if is_last_input and not has_output else TREE_CHARS["branch"]
+    prefix_char = TREE_CHARS["last"] if is_last_input and not has_output else TREE_CHARS["branch"]
+    # Colorize the tree structure
+    prefix = colorize(prefix_char, "tree_structure")
+
+    # Colorize the input label
+    input_label = colorize(f"Input {input_index}", "input_label")
 
     # Check if this input is a reference to a previous command's output
     source_cmd = -1
@@ -141,28 +164,49 @@ def format_input_line(
         if isinstance(numeric_val, int) and numeric_val < 0:
             if "command_type" in command and command["command_type"] == "SUBPLAN":
                 if numeric_val == -1:  # SUBPLAN_PLACEHOLDER
-                    return f"{prefix} Input {input_index}: <Subplan>"
+                    subplan_text = colorize("<Subplan>", "subplan")
+                    return f"{prefix} {input_label}: {subplan_text}"
                 else:
-                    return f"{prefix} Input {input_index}: <Special Value: {numeric_val}>"
+                    special_text = colorize(f"<Special Value: {numeric_val}>", "subplan")
+                    return f"{prefix} {input_label}: {special_text}"
             else:
-                return f"{prefix} Input {input_index}: <Special Value: {numeric_val}>"
+                special_text = colorize(f"<Special Value: {numeric_val}>", "state_ref")
+                return f"{prefix} {input_label}: {special_text}"
 
         # Regular state reference
         elif isinstance(numeric_val, int):
             # First check if this value comes from a command output
             source_cmd, _ = state_sources.get(numeric_val, (-1, -1))
+            state_ref = colorize(f"State[{numeric_val}]", "state_ref")
+            
             if source_cmd >= 0:
-                return f"{prefix} Input {input_index}: State[{numeric_val}] (from Command {source_cmd} output)"
+                cmd_ref = colorize(f"Command {source_cmd}", "function_name")
+                return f"{prefix} {input_label}: {state_ref} (from {cmd_ref} output)"
             elif numeric_val < len(state):
                 # It's an initial state value
                 value_formatted = format_value(state[numeric_val])
-                return f"{prefix} Input {input_index}: State[{numeric_val}] = {value_formatted}"
+                # Colorize value based on type
+                if isinstance(state[numeric_val], str):
+                    if state[numeric_val].startswith("0x"):  # Likely address or bytes
+                        if len(state[numeric_val]) == 42:  # Ethereum address
+                            value_formatted = colorize(value_formatted, "value_address")
+                        else:
+                            value_formatted = colorize(value_formatted, "value_bytes")
+                    else:
+                        value_formatted = colorize(value_formatted, "value_string")
+                elif isinstance(state[numeric_val], (int, float)):
+                    value_formatted = colorize(value_formatted, "value_number")
+                elif isinstance(state[numeric_val], bool):
+                    value_formatted = colorize(value_formatted, "value_bool")
+                
+                return f"{prefix} {input_label}: {state_ref} = {value_formatted}"
             else:
                 # Reference to a state that will be computed during execution
-                return f"{prefix} Input {input_index}: State[{numeric_val}]"
+                return f"{prefix} {input_label}: {state_ref}"
 
     # Handle non-integer inputs (should be rare in the planner, more common in decoded plans)
-    return f"{prefix} Input {input_index}: {format_value(input_val)}"
+    value_text = colorize(format_value(input_val), "value_string")
+    return f"{prefix} {input_label}: {value_text}"
 
 
 def format_output_line(
@@ -244,33 +288,55 @@ def format_output_line(
     # Sort by command index
     usage_details.sort()
 
-    # Format the output line
-    output_prefix = f"{TREE_CHARS['last']} Output: "
-    if output_type:
-        output_prefix = f"{TREE_CHARS['last']} Output ({output_type}): "
+    # Colorize the tree structure
+    prefix_char = TREE_CHARS["last"]
+    prefix = colorize(prefix_char, "tree_structure")
 
+    # Colorize the output label
+    output_label_text = "Output"
+    if output_type:
+        output_label_text = f"Output ({output_type})"
+    output_label = colorize(output_label_text, "output_label")
+    
+    # Colorize state reference
+    state_ref = colorize(f"State[{numeric_output_val}]", "state_ref")
+
+    # Format the output line with colorization
     if usage_details:
         if len(usage_details) == 1:
             cmd_idx, fn_name, param_name = usage_details[0]
+            
             if fn_name and param_name:
-                return f"{output_prefix}State[{numeric_output_val}] → Command {cmd_idx} ({fn_name}.{param_name})"
+                cmd_ref = colorize(f"Command {cmd_idx}", "function_name")
+                param_ref = colorize(f"{fn_name}.{param_name}", "param_name")
+                arrow = colorize("→", "tree_structure")
+                return f"{prefix} {output_label}: {state_ref} {arrow} {cmd_ref} ({param_ref})"
             else:
-                return f"{output_prefix}State[{numeric_output_val}] → Command {cmd_idx}"
+                cmd_ref = colorize(f"Command {cmd_idx}", "function_name")
+                arrow = colorize("→", "tree_structure")
+                return f"{prefix} {output_label}: {state_ref} {arrow} {cmd_ref}"
         else:
             # Multiple usages
             usage_strs = []
             for cmd_idx, fn_name, param_name in usage_details:
                 if fn_name and param_name:
-                    usage_strs.append(f"Command {cmd_idx} ({fn_name}.{param_name})")
+                    cmd_ref = colorize(f"Command {cmd_idx}", "function_name")
+                    param_ref = colorize(f"{fn_name}.{param_name}", "param_name")
+                    usage_strs.append(f"{cmd_ref} ({param_ref})")
                 else:
-                    usage_strs.append(f"Command {cmd_idx}")
-            return f"{output_prefix}State[{numeric_output_val}] → " + ", ".join(usage_strs)
+                    cmd_ref = colorize(f"Command {cmd_idx}", "function_name")
+                    usage_strs.append(f"{cmd_ref}")
+                    
+            arrow = colorize("→", "tree_structure")
+            return f"{prefix} {output_label}: {state_ref} {arrow} " + ", ".join(usage_strs)
     else:
-        return f"{output_prefix}State[{numeric_output_val}] (unused in future commands)"
+        unused_msg = colorize("(unused in future commands)", "unused")
+        return f"{prefix} {output_label}: {state_ref} {unused_msg}"
 
 
 def render_tree(
-    commands: List[Dict[str, Any]], state: List[Any], call_types: List[str], contracts: Optional[Dict[str, Any]] = None
+    commands: List[Dict[str, Any]], state: List[Any], call_types: List[str], contracts: Optional[Dict[str, Any]] = None,
+    use_color: Optional[bool] = None
 ) -> str:
     """
     Renders a plan execution tree.
@@ -283,6 +349,7 @@ def render_tree(
         state: List of state values
         call_types: List of call types (e.g. "STATICCALL", "CALL")
         contracts: Optional dictionary of contract objects to decode function selectors
+        use_color: Whether to use colors in the output (None for auto-detection)
 
     Returns:
         Formatted string representation of the execution tree
