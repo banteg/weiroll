@@ -387,7 +387,15 @@ class Planner:
             
             # All inputs should be resolved at this point
             # Encode the command
-            encoded_commands.append("0x" + cmd.encode().hex())
+            encoded_cmd = "0x" + cmd.encode().hex()
+            encoded_commands.append(encoded_cmd)
+            
+            # If this command has extended inputs (more than 6), add extended inputs command
+            if cmd.extended_inputs:
+                extended_inputs_cmd = cmd.encode_extended_inputs()
+                if extended_inputs_cmd:
+                    # Add the extended inputs command
+                    encoded_commands.append("0x" + extended_inputs_cmd.hex())
 
         # Encode state values
         for i, value in enumerate(self.state):

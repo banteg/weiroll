@@ -165,6 +165,27 @@ class Decoder:
     """
 
     @staticmethod
+    def decode_extended_inputs(command_data: str | bytes) -> list[int]:
+        """
+        Decode extended inputs from a specialized extended inputs command.
+        
+        Args:
+            command_data: The extended inputs command data
+            
+        Returns:
+            list[int]: List of state indices for extended inputs
+        """
+        # Use the Command class to decode the extended inputs command
+        cmd = Command.decode(command_data)
+        
+        # Check if this is actually an extended inputs command
+        if cmd.function_selector != b"\xFF\xFF\xFF\xFF":
+            return []
+            
+        # Extract the input indices
+        return [arg.index for arg in cmd.inputs]
+    
+    @staticmethod
     def decode_command(command_data: str | bytes) -> DecodedCommand:
         """
         Decode a command from bytes32 or hex string.
@@ -281,6 +302,36 @@ class Decoder:
                 clean_state.append(to_hex(value))
             else:
                 clean_state.append(value)
+                
+        # Process command pairs for extended inputs
+        i = 0
+        while i < len(commands) - 1:
+            cmd_data = commands[i]
+            next_cmd_data = commands[i + 1]
+            
+            # Check if current command is extended and next is an extended inputs command
+            try:
+                # Decode main command
+                cmd = Command.decode(cmd_data)
+                
+                if cmd.extended_inputs:
+                    # Decode extended inputs from next command
+                    extended_indices = Decoder.decode_extended_inputs(next_cmd_data)
+                    
+                    if extended_indices:
+                        logger.debug(f"Found {len(extended_indices)} extended inputs for command {i}")
+                        
+                        # Add extended inputs to the decoded command
+                        decoded_commands[i].inputs.extend(extended_indices)
+                        
+                        # Skip the extended inputs command as it's been processed
+                        i += 2
+                        continue
+            except Exception as e:
+                logger.debug(f"Error processing extended inputs at command {i}: {e}")
+            
+            # Move to next command if no extended inputs found
+            i += 1
 
         # If lookup_function_info is True, try to enhance command info
         if lookup_function_info:
@@ -588,7 +639,6 @@ class Decoder:
                 output=output_arg,
                 call_type=call_type,
                 is_tuple_return=decoded_cmd.is_tuple_return,
-                extended_inputs=decoded_cmd.is_extended,
             )
 
             planner.commands.append(cmd)
