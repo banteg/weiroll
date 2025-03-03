@@ -537,22 +537,28 @@ class Planner:
                     if hasattr(contract, "identifier_lookup") and selector_hex in contract.identifier_lookup:
                         fn_name = contract.identifier_lookup[selector_hex].signature
                     
-                    # Try to get the contract name
-                    if hasattr(contract, "contract_type") and contract.contract_type.name:
-                        contract_name = contract.contract_type.name
-                    # If contract_type.name is not available, try the name() function
-                    elif hasattr(contract, "name") and callable(contract.name):
+                    # Try to get the contract name - prioritize name() function first
+                    name_found = False
+                    
+                    # Try to get the name from name() function first
+                    if hasattr(contract, "name") and callable(contract.name):
                         try:
                             # Try to call name() but catch exceptions
                             contract_name = contract.name.call()
+                            name_found = True
                         except Exception:
                             # name() call failed, try with symbol() as fallback
                             if hasattr(contract, "symbol") and callable(contract.symbol):
                                 try:
                                     # Try to get symbol as a fallback for name
                                     contract_name = contract.symbol.call()
+                                    name_found = True
                                 except Exception:
                                     pass
+                    
+                    # If name() failed, fall back to contract_type.name
+                    if not name_found and hasattr(contract, "contract_type") and contract.contract_type.name:
+                        contract_name = contract.contract_type.name
                 except Exception:
                     # If ape is not available or there's an error, use the default
                     pass

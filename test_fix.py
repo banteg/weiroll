@@ -25,10 +25,17 @@ def main():
         print("\nExample: Vault Deposit Flow with Contract Names")
         planner = weiroll.Planner()
         
+        # Add WETH contract which has a name() function 
+        weth_address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"  # WETH
+        weth = weiroll.Contract(ApeContract(weth_address))
+        
         # Create a balanced deposit flow using multiple contracts
         amount = planner.add(token.balanceOf(str(dev)))
         planner.add(token.approve(str(vault.address), amount))
         shares = planner.add(vault.deposit(amount, str(dev)))
+        
+        # Add a WETH operation to test name() detection
+        planner.add(weth.balanceOf(str(dev)))
         
         # Show tree with enhanced visualization
         print("\nEnhanced Command Tree:")
