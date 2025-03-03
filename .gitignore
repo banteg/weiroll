@@ -5,3 +5,4 @@ cache
 artifacts
 
 __marimo__
+uv.lock
