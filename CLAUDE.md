@@ -1,7 +1,5 @@
 # Weiroll Development Guide
 
-CLAUDE DO NOT EDIT FILES MARKED "BUNNY VISION"
-
 ## Python SDK
 
 ### Overview
