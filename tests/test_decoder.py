@@ -19,25 +19,25 @@ Command 2: redeem(uint256 shares, address receiver, address owner) -> uint256 @ 
   ├─ Input 0: State[2] (from Command 1 output)
   ├─ Input 1: State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
   ├─ Input 2: State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
-  └─ Output: State[3] (unused)
+  └─ Output: State[3] (unused in future commands)
 """).strip()
 
 # Optional fallback expected output for different environments/versions
 alternative_vault_plan_output = textwrap.dedent("""
 Command 0: balanceOf(address holder) -> uint256 @ 0x6B175474E89094C44Da98b954EedeAC495271d0F [CALL]
   ├─ Input 0: State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
-  └─ Output: State[1] (unused)
+  └─ Output: State[1] (unused in future commands)
 
 Command 1: deposit(uint256 assets, address receiver) -> uint256 @ 0xd8063123BBA3B480569244AE66BFE72B6c84b00d [CALL]
   ├─ Input 0: uint256
   ├─ Input 1: State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
-  └─ Output: State[2] (unused)
+  └─ Output: State[2] (unused in future commands)
 
 Command 2: redeem(uint256 shares, address receiver, address owner) -> uint256 @ 0xd8063123BBA3B480569244AE66BFE72B6c84b00d [CALL]
   ├─ Input 0: uint256
   ├─ Input 1: State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
   ├─ Input 2: State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
-  └─ Output: State[3] (unused)
+  └─ Output: State[3] (unused in future commands)
 """).strip()
 
 

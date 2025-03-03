@@ -1,29 +1,33 @@
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple
 
 from eth_utils import to_checksum_address
 
 from .formatters import format_value
 
+# Tree drawing characters
+TREE_CHARS = {
+    "branch": "  ├─",  # For most items in a list
+    "last": "  └─",  # For the last item in a list
+    "vertical": "  │ ",  # Vertical continuation
+    "empty": "    ",  # Empty space
+}
 
-def render_tree(
-    commands: list[dict[str, Any]], state: list[Any], call_types: list[str], contracts: dict[str, Any] | None = None
-) -> str:
+
+def build_state_dependency_maps(
+    commands: List[Dict[str, Any]], state: List[Any]
+) -> Tuple[Dict[int, Tuple[int, int]], Dict[int, List[Tuple[int, int]]]]:
     """
-    Renders a plan execution tree.
-
-    This is a shared implementation used by both Planner.show_tree and DecodedPlan.__str__
-    to ensure consistent output format between both implementations.
+    Build maps of state dependencies between commands.
 
     Args:
         commands: List of command dictionaries
         state: List of state values
-        call_types: List of call types (e.g. "STATICCALL", "CALL")
-        contracts: Optional dictionary of contract objects to decode function selectors
 
     Returns:
-        Formatted string representation of the execution tree
+        Tuple containing:
+        - state_sources: Maps state index to the command that produced it
+        - state_usage: Maps state index to commands that use it as input
     """
-    # Create a mapping of state sources and usage
     state_sources = {}  # Maps state index to the command that produced it
     state_usage = {}  # Maps state index to commands that use it as input
 
@@ -66,108 +70,193 @@ def render_tree(
                 # Skip if we can't convert to int
                 continue
 
+    return state_sources, state_usage
+
+
+def format_command_header(command: Dict[str, Any], index: int, call_type: str) -> str:
+    """
+    Format the command header line.
+
+    Args:
+        command: The command dictionary
+        index: Command index
+        call_type: The call type (e.g., "CALL", "DELEGATECALL")
+
+    Returns:
+        Formatted header string
+    """
+    # Format target address
+    target = command.get("to", "0x0000000000000000000000000000000000000000")
+    target_formatted = to_checksum_address(target)
+
+    # Format function signature
+    function_formatted = command.get("function", f"function({command.get('selector', '0x00000000')})")
+
+    # Handle command type
+    command_type = command.get("command_type", "CALL")
+    if command_type != "CALL":
+        return f"Command {index}: {function_formatted} @ {target_formatted} [{call_type}, {command_type}]"
+    else:
+        return f"Command {index}: {function_formatted} @ {target_formatted} [{call_type}]"
+
+
+def format_input_line(
+    input_val: Any,
+    input_index: int,
+    is_last_input: bool,
+    has_output: bool,
+    command: Dict[str, Any],
+    state_sources: Dict[int, Tuple[int, int]],
+    state: List[Any],
+) -> str:
+    """
+    Format a single input line for the command.
+
+    Args:
+        input_val: The input value
+        input_index: Index of this input in the command's inputs
+        is_last_input: Whether this is the last input in the list
+        has_output: Whether the command has outputs
+        command: The command dictionary
+        state_sources: Maps state index to the command that produced it
+        state: List of state values
+
+    Returns:
+        Formatted input line
+    """
+    # Determine the tree character to use
+    prefix = TREE_CHARS["last"] if is_last_input and not has_output else TREE_CHARS["branch"]
+
+    # Check if this input is a reference to a previous command's output
+    source_cmd = -1
+
+    if isinstance(input_val, int) or (isinstance(input_val, str) and input_val.isdigit()):
+        # Convert to int for consistency
+        try:
+            numeric_val = int(input_val)
+        except (ValueError, TypeError):
+            numeric_val = input_val
+
+        # Special handling for negative indices (placeholders for state or subplans)
+        if isinstance(numeric_val, int) and numeric_val < 0:
+            if "command_type" in command and command["command_type"] == "SUBPLAN":
+                if numeric_val == -1:  # SUBPLAN_PLACEHOLDER
+                    return f"{prefix} Input {input_index}: <Subplan>"
+                else:
+                    return f"{prefix} Input {input_index}: <Special Value: {numeric_val}>"
+            else:
+                return f"{prefix} Input {input_index}: <Special Value: {numeric_val}>"
+
+        # Regular state reference
+        elif isinstance(numeric_val, int):
+            # First check if this value comes from a command output
+            source_cmd, _ = state_sources.get(numeric_val, (-1, -1))
+            if source_cmd >= 0:
+                return f"{prefix} Input {input_index}: State[{numeric_val}] (from Command {source_cmd} output)"
+            elif numeric_val < len(state):
+                # It's an initial state value
+                value_formatted = format_value(state[numeric_val])
+                return f"{prefix} Input {input_index}: State[{numeric_val}] = {value_formatted}"
+            else:
+                # Reference to a state that will be computed during execution
+                return f"{prefix} Input {input_index}: State[{numeric_val}]"
+
+    # Handle non-integer inputs (should be rare in the planner, more common in decoded plans)
+    return f"{prefix} Input {input_index}: {format_value(input_val)}"
+
+
+def format_output_line(output_val: Any, command_index: int, state_usage: Dict[int, List[Tuple[int, int]]]) -> str:
+    """
+    Format the output line for the command.
+
+    Args:
+        output_val: The output value
+        command_index: Index of this command
+        state_usage: Maps state index to commands that use it as input
+
+    Returns:
+        Formatted output line
+    """
+    # Create a normalized numeric value for the output
+    numeric_output_val = output_val
+    if isinstance(output_val, str) and " " in output_val:
+        numeric_output_val = output_val.split()[0]
+
+    try:
+        numeric_output_val = int(numeric_output_val)
+    except (ValueError, TypeError):
+        numeric_output_val = output_val
+
+    # Find if this output is used by commands in the state_usage map
+    used_in_commands = []
+    if numeric_output_val in state_usage:
+        for cmd_idx, _ in state_usage[numeric_output_val]:
+            # Only consider future commands (after this one)
+            if cmd_idx > command_index:
+                used_in_commands.append(cmd_idx)
+
+    # Sort the commands to get the earliest one first
+    used_in_commands.sort()
+
+    # Format the output line
+    if used_in_commands:
+        if len(used_in_commands) == 1:
+            next_cmd = used_in_commands[0]
+            return f"{TREE_CHARS['last']} Output: State[{output_val}] (→ Command {next_cmd})"
+        else:
+            cmd_refs = ", ".join([str(cmd) for cmd in used_in_commands])
+            return f"{TREE_CHARS['last']} Output: State[{output_val}] (→ Commands {cmd_refs})"
+    else:
+        return f"{TREE_CHARS['last']} Output: State[{output_val}] (unused in future commands)"
+
+
+def render_tree(
+    commands: List[Dict[str, Any]], state: List[Any], call_types: List[str], contracts: Optional[Dict[str, Any]] = None
+) -> str:
+    """
+    Renders a plan execution tree.
+
+    This is a shared implementation used by both Planner.show_tree and DecodedPlan.__str__
+    to ensure consistent output format between both implementations.
+
+    Args:
+        commands: List of command dictionaries
+        state: List of state values
+        call_types: List of call types (e.g. "STATICCALL", "CALL")
+        contracts: Optional dictionary of contract objects to decode function selectors
+
+    Returns:
+        Formatted string representation of the execution tree
+    """
+    # Build dependency maps
+    state_sources, state_usage = build_state_dependency_maps(commands, state)
+
     # Format each command
     lines = []
     for i, command in enumerate(commands):
-        inputs = command.get("inputs", [])
-        outputs = command.get("outputs", [])
+        # Add command header
         call_type = call_types[i] if i < len(call_types) else "CALL"
-        command_type = command.get("command_type", "CALL")
-
-        # Format target address
-        target = command.get("to", "0x0000000000000000000000000000000000000000")
-        target_formatted = to_checksum_address(target)
-
-        # Format function signature
-        function_formatted = command.get("function", f"function({command.get('selector', '0x00000000')})")
-
-        # Handle command type
-        if command_type != "CALL":
-            command_header = f"Command {i}: {function_formatted} @ {target_formatted} [{call_type}, {command_type}]"
-        else:
-            command_header = f"Command {i}: {function_formatted} @ {target_formatted} [{call_type}]"
-        lines.append(command_header)
+        lines.append(format_command_header(command, i, call_type))
 
         # Process inputs
+        inputs = command.get("inputs", [])
+        outputs = command.get("outputs", [])
+
         input_lines = []
         for j, input_val in enumerate(inputs):
             is_last_input = j == len(inputs) - 1
             has_output = bool(outputs)
-
-            prefix = "  └─" if is_last_input and not has_output else "  ├─"
-
-            # Check if this input is a reference to a previous command's output
-            source_cmd = -1
-
-            if isinstance(input_val, int) or (isinstance(input_val, str) and input_val.isdigit()):
-                # Convert to int for consistency
-                try:
-                    numeric_val = int(input_val)
-                except (ValueError, TypeError):
-                    numeric_val = input_val
-
-                # Special handling for negative indices (placeholders for state or subplans)
-                if isinstance(numeric_val, int) and numeric_val < 0:
-                    if "command_type" in command and command["command_type"] == "SUBPLAN":
-                        if numeric_val == -1:  # SUBPLAN_PLACEHOLDER
-                            input_lines.append(f"{prefix} Input {j}: <Subplan>")
-                        else:
-                            input_lines.append(f"{prefix} Input {j}: <Special Value: {numeric_val}>")
-                    else:
-                        input_lines.append(f"{prefix} Input {j}: <Special Value: {numeric_val}>")
-
-                # Regular state reference
-                elif isinstance(numeric_val, int):
-                    # First check if this value comes from a command output
-                    source_cmd, _ = state_sources.get(numeric_val, (-1, -1))
-                    if source_cmd >= 0:
-                        input_lines.append(
-                            f"{prefix} Input {j}: State[{numeric_val}] (from Command {source_cmd} output)"
-                        )
-                    elif numeric_val < len(state):
-                        # It's an initial state value
-                        value_formatted = format_value(state[numeric_val])
-                        input_lines.append(f"{prefix} Input {j}: State[{numeric_val}] = {value_formatted}")
-                    else:
-                        # Reference to a state that will be computed during execution
-                        input_lines.append(f"{prefix} Input {j}: State[{numeric_val}]")
-            else:
-                # Handle non-integer inputs (should be rare in the planner, more common in decoded plans)
-                input_lines.append(f"{prefix} Input {j}: {input_val}")
+            input_lines.append(
+                format_input_line(input_val, j, is_last_input, has_output, command, state_sources, state)
+            )
 
         # Add input lines
         lines.extend(input_lines)
 
         # Format outputs
         if outputs:
-            for j, output_val in enumerate(outputs):
-                # Create a normalized numeric value for the output
-                numeric_output_val = output_val
-                if isinstance(output_val, str) and " " in output_val:
-                    numeric_output_val = output_val.split()[0]
-
-                try:
-                    numeric_output_val = int(numeric_output_val)
-                except (ValueError, TypeError):
-                    numeric_output_val = output_val
-
-                # Find if this output is used by commands in the state_usage map
-                used_in_commands = []
-                if numeric_output_val in state_usage:
-                    for cmd_idx, _ in state_usage[numeric_output_val]:
-                        # Only consider future commands (after this one)
-                        if cmd_idx > i:
-                            used_in_commands.append(cmd_idx)
-
-                # Sort the commands to get the earliest one first
-                used_in_commands.sort()
-
-                # Format the output line
-                if used_in_commands:
-                    next_cmd = used_in_commands[0]
-                    lines.append(f"  └─ Output: State[{output_val}] (→ Command {next_cmd})")
-                else:
-                    lines.append(f"  └─ Output: State[{output_val}] (unused)")
+            for output_val in outputs:
+                lines.append(format_output_line(output_val, i, state_usage))
 
         # Add an empty line between commands
         if i < len(commands) - 1:

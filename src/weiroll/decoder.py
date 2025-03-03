@@ -1,6 +1,6 @@
 import logging
 from functools import lru_cache
-from typing import Any, Union
+from typing import Any, Dict, Union
 
 from ape import Contract as ApeContract
 from eth_utils import function_signature_to_4byte_selector, to_checksum_address, to_hex
@@ -8,15 +8,11 @@ from eth_utils import function_signature_to_4byte_selector, to_checksum_address,
 from .command import Command, CommandArg
 from .planner import Planner
 
-# Set up logger
+# Set up logger without forcing handlers or levels
 logger = logging.getLogger("weiroll.decoder")
-# Set to debug level
-logger.setLevel(logging.DEBUG)
-# Add console handler if not already present
-if not logger.handlers:
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.DEBUG)
-    logger.addHandler(console_handler)
+
+# Constants
+EXTENDED_INPUT_SELECTOR = b"\xff\xff\xff\xff"
 
 
 class Decoder:
@@ -45,6 +41,55 @@ class Decoder:
     """
 
     @staticmethod
+    def lookup_function_info(contract: ApeContract, selector_hex: str) -> Dict[str, str]:
+        """
+        Look up function information using a consistent approach.
+
+        Attempts to determine function name and signature using:
+        1. Contract's identifier_lookup
+        2. Contract's decode_input
+        3. Falls back to a generic placeholder
+
+        Args:
+            contract: The contract object
+            selector_hex: The function selector as a hex string
+
+        Returns:
+            A dictionary with function name, signature, and selector
+        """
+        function_name = "function"
+        function_signature = f"function({selector_hex})"
+
+        try:
+            logger.debug(f"Processing selector: {selector_hex}")
+
+            # 1. Try to get from identifier_lookup (most reliable)
+            if hasattr(contract, "identifier_lookup") and selector_hex in contract.identifier_lookup:
+                identifier = contract.identifier_lookup[selector_hex]
+                function_signature = identifier.signature
+                function_name = identifier.name
+                logger.debug(f"Matched function via identifier_lookup: {function_signature}")
+            else:
+                # 2. Try with decode_input
+                try:
+                    selector_bytes = bytes.fromhex(selector_hex[2:] if selector_hex.startswith("0x") else selector_hex)
+                    # Add placeholders for multiple parameters
+                    min_calldata = selector_bytes + b"\x00" * 128
+
+                    # Try to get the function signature
+                    decoded_input = contract.decode_input(min_calldata)
+                    if decoded_input and len(decoded_input) > 0:
+                        function_signature = decoded_input[0]
+                        function_name = function_signature.split("(")[0]
+                        logger.debug(f"Matched function via decode_input: {function_signature}")
+                except Exception as e:
+                    logger.debug(f"Error in decode_input: {e}")
+        except Exception as e:
+            logger.debug(f"Error looking up function info: {e}")
+
+        return {"name": function_name, "signature": function_signature, "selector": selector_hex}
+
+    @staticmethod
     def decode_extended_inputs(command_data: Union[str, bytes]) -> list[int]:
         """
         Decode extended inputs from a specialized extended inputs command.
@@ -59,7 +104,7 @@ class Decoder:
         cmd = Command.decode(command_data)
 
         # Check if this is actually an extended inputs command
-        if cmd.function_selector != b"\xff\xff\xff\xff":
+        if cmd.function_selector != EXTENDED_INPUT_SELECTOR:
             return []
 
         # Extract the input indices
@@ -95,55 +140,15 @@ class Decoder:
         # Try to look up with ape if available
         try:
             contract = ApeContract(target_address)
-
-            # Try to get the signature from the contract's identifier_lookup
-            # Try to use decode_input to get the correct function signature
-            try:
-                # Log the selector for debugging
-                logger.debug(f"Processing selector: {selector_hex}")
-
-                # Try to get the function info from identifier_lookup
-                if hasattr(contract, "identifier_lookup") and selector_hex in contract.identifier_lookup:
-                    identifier = contract.identifier_lookup[selector_hex]
-                    function_signature = identifier.signature
-                    function_name = identifier.name
-                    logger.debug(f"Matched function via identifier_lookup: {function_signature}")
-                else:
-                    # Use decode_input with enough data for the function to be identified
-                    try:
-                        selector_bytes = bytes.fromhex(
-                            selector_hex[2:] if selector_hex.startswith("0x") else selector_hex
-                        )
-                        # Add more placeholders to handle functions with multiple args
-                        min_calldata = selector_bytes + b"\x00" * 128  # 4 parameters x 32 bytes
-
-                        # Try to get the function signature from decode_input
-                        decoded_input = contract.decode_input(min_calldata)
-                        if decoded_input and len(decoded_input) > 0:
-                            # First element is the function signature string
-                            function_signature = decoded_input[0]
-                            function_name = function_signature.split("(")[0]
-                            logger.debug(f"Matched function via decode_input: {function_signature}")
-                        else:
-                            # If no signature found, use a generic one
-                            function_name = "function"
-                            function_signature = f"function({selector_hex})"
-                            logger.debug(f"Using generic function signature for selector: {selector_hex}")
-                    except Exception as e:
-                        logger.debug(f"Error in decode_input: {e}")
-                        # Fall back to a simpler selector-based name
-                        function_name = "function"
-                        function_signature = f"function({selector_hex})"
-
-                cmd.function_info = {
-                    "name": function_name,
-                    "signature": function_signature,
-                    "selector": selector_hex,  # Keep the original selector
-                }
-            except Exception as e:
-                logger.debug(f"Error looking up function by identifier: {e}")
+            cmd.function_info = Decoder.lookup_function_info(contract, selector_hex)
         except Exception as e:
             logger.debug(f"Error looking up function info: {e}")
+            # Use fallback generic function info
+            cmd.function_info = {
+                "name": "function",
+                "signature": f"function({selector_hex})",
+                "selector": selector_hex,
+            }
 
         return cmd
 
@@ -216,67 +221,18 @@ class Decoder:
 
             # For each target address, try to get ABI and function info in bulk
             for target, cmds in target_addresses.items():
-                # Try with ape if available
-                contract = ApeContract(target)
+                try:
+                    # Try with ape if available
+                    contract = ApeContract(target)
 
-                # For each command targeting this contract
-                for cmd in cmds:
-                    # Only process if function info not already set
-                    if not hasattr(cmd, "function_info") or not cmd.function_info:
-                        # Try to get the signature from the contract's identifier_lookup
-                        # Try to use decode_input to get the correct function signature for this selector
-                        try:
-                            # Check identifier_lookup first (most reliable)
+                    # For each command targeting this contract
+                    for cmd in cmds:
+                        # Only process if function info not already set
+                        if not hasattr(cmd, "function_info") or not cmd.function_info:
                             selector = "0x" + cmd.function_selector.hex()
-                            logger.debug(f"Processing selector in decode_plan: {selector}")
-
-                            # Use identifier lookup when available
-                            if hasattr(contract, "identifier_lookup") and selector in contract.identifier_lookup:
-                                # Get function details from identifier lookup
-                                identifier = contract.identifier_lookup[selector]
-                                function_signature = identifier.signature
-                                function_name = identifier.name
-                                logger.debug(f"Matched function via identifier_lookup: {function_signature}")
-                            else:
-                                # Try to get a better signature from decode_input
-                                try:
-                                    selector_bytes = bytes.fromhex(
-                                        selector[2:] if selector.startswith("0x") else selector
-                                    )
-                                    # Use more zeros to handle functions with multiple parameters
-                                    min_calldata = selector_bytes + b"\x00" * 128  # Support up to 4 parameters
-
-                                    # Use decode_input to get the function signature
-                                    decoded_input = contract.decode_input(min_calldata)
-                                    if decoded_input and len(decoded_input) > 0:
-                                        # First element is the function signature string
-                                        function_signature = decoded_input[0]
-                                        function_name = function_signature.split("(")[0]
-                                        logger.debug(f"Matched via decode_input: {function_signature}")
-                                    else:
-                                        # Default fallback if no signature found
-                                        function_signature = f"function({selector})"
-                                        function_name = "function"
-                                except Exception as e:
-                                    logger.debug(f"Error using decode_input: {e}")
-                                    # Fall back to a basic name
-                                    function_signature = f"function({selector})"
-                                    function_name = "function"
-
-                            cmd.function_info = {
-                                "name": function_name,
-                                "signature": function_signature,
-                                "selector": selector,  # Keep the original selector
-                            }
-                        except Exception as e:
-                            logger.debug(f"Error using decode_input for cmd: {e}")
-                            if hasattr(contract, "identifier_lookup") and selector in contract.identifier_lookup:
-                                identifier = contract.identifier_lookup[selector]
-                                cmd.function_info = {
-                                    "name": identifier.name,
-                                    "signature": identifier.signature,
-                                    "selector": selector,  # Use the actual selector from the command
-                                }
+                            cmd.function_info = Decoder.lookup_function_info(contract, selector)
+                except Exception as e:
+                    logger.debug(f"Error processing contract at {target}: {e}")
 
         # Set the planner's properties
         planner.commands = decoded_commands
@@ -294,14 +250,26 @@ class Decoder:
         planner.next_state_index = max_state_index + 1
 
         # Add metadata to the planner for enhanced display
-        planner.is_decoded = True
+        # Keep this public attribute for backward compatibility with tests
+        planner.is_decoded = True  # Public attribute for tests
+        # In the future, we should use the private attribute instead
+        planner._is_decoded = True
 
-        # Store the original __str__ method and override it to use show_tree by default
+        # Add a method to get tree representation without overriding __str__
         from types import MethodType
 
+        # Add a decoded_str method instead of overriding __str__
+        planner.decoded_str = MethodType(lambda self: self.show_tree(), planner)
+
+        # Optionally, we could still override __str__ but in a cleaner way:
         original_str = planner.__str__
         planner._original_str = original_str  # Save original for reference
-        planner.__str__ = MethodType(lambda self: self.show_tree(), planner)
+
+        # Define a safer __str__ that delegates to show_tree
+        def enhanced_str(self):
+            return self.show_tree()
+
+        planner.__str__ = MethodType(enhanced_str, planner)
 
         return planner
 
@@ -345,44 +313,15 @@ class Decoder:
 
         # Find the function in the ABI using one of several approaches
         fn_selector = "0x" + cmd.function_selector.hex()
-        function_signature = None
 
         # Only attempt to look up if not already found
         if not hasattr(cmd, "function_info") or not cmd.function_info:
-            # 1. Try to get the function signature from the contract's identifier_lookup
-            contract = ApeContract(contract_address)
-            # Try to use decode_input to get the correct function signature for this selector
             try:
-                logger.debug(f"Processing selector in decode_command_with_abi: {fn_selector}")
-
-                # For other selectors, use decode_input
-                selector_bytes = bytes.fromhex(fn_selector[2:] if fn_selector.startswith("0x") else fn_selector)
-                min_calldata = selector_bytes + b"\x00" * 32  # Add one parameter of zeros
-
-                # Use decode_input to get the function signature
-                decoded_input = contract.decode_input(min_calldata)
-                if decoded_input and len(decoded_input) > 0:
-                    # First element is the function signature string
-                    function_signature = decoded_input[0]
-                    function_name = function_signature.split("(")[0]
-
-                cmd.function_info = {
-                    "name": function_name,
-                    "signature": function_signature,
-                    "selector": fn_selector,  # Keep the original selector
-                }
+                # 1. Try to get the function signature using our helper
+                contract = ApeContract(contract_address)
+                cmd.function_info = Decoder.lookup_function_info(contract, fn_selector)
             except Exception as e:
-                # Fall back to identifier_lookup if decode_input fails
-                logger.debug(f"Error using decode_input in decode_command_with_abi: {e}")
-                if hasattr(contract, "identifier_lookup") and fn_selector in contract.identifier_lookup:
-                    identifier = contract.identifier_lookup[fn_selector]
-                    function_signature = identifier.signature
-                    # Use the actual selector from the command to ensure we get the correct function
-                    cmd.function_info = {
-                        "name": identifier.name,
-                        "signature": function_signature,
-                        "selector": fn_selector,
-                    }
+                logger.debug(f"Error looking up function via contract: {e}")
 
         # 2. Try to find the function in the provided ABI
         if (not hasattr(cmd, "function_info") or not cmd.function_info) and abi:
@@ -426,17 +365,12 @@ class Decoder:
 
             # 3. Try to use 4byte.directory API or other signature sources
             # We'll only implement this placeholder for now - future enhancement
-            if (not hasattr(cmd, "function_info") or not cmd.function_info) and not function_signature:
+            if not hasattr(cmd, "function_info") or not cmd.function_info:
                 # Placeholder for possible future enhancement:
                 # - Query 4byte.directory API
                 # - Use local signature database
                 # - Check etherscan API
                 pass
-
-            # Add minimal function info if only signature is available
-            if (not hasattr(cmd, "function_info") or not cmd.function_info) and function_signature:
-                name = function_signature.split("(")[0]
-                cmd.function_info = {"name": name, "signature": function_signature}
 
         return cmd
 
