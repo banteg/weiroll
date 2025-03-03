@@ -62,7 +62,7 @@ def render_tree(
         inputs = command.get("inputs", [])
         outputs = command.get("outputs", [])
         call_type = call_types[i] if i < len(call_types) else "CALL"
-        command.get("command_type", "CALL")
+        command_type = command.get("command_type", "CALL")
         
         # Format target address
         target = command.get("to", "0x0000000000000000000000000000000000000000")
@@ -72,7 +72,10 @@ def render_tree(
         function_formatted = command.get("function", f"function({command.get('selector', '0x00000000')})")
         
         # Handle command type
-        command_header = f"Command {i}: {function_formatted} @ {target_formatted} [{call_type}]"
+        if command_type != "CALL":
+            command_header = f"Command {i}: {function_formatted} @ {target_formatted} [{call_type}, {command_type}]"
+        else:
+            command_header = f"Command {i}: {function_formatted} @ {target_formatted} [{call_type}]"
         lines.append(command_header)
 
         # Process inputs

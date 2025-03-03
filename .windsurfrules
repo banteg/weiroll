@@ -1,5 +1,7 @@
 we work on a python sdk in `src/weiroll/`
 
+always use snake_case for method names
 test: `uv run pytest tests/`
 lint: `ruff check --fix --unsafe-fixes`
 install packages: `uv add`
+use conventional commits

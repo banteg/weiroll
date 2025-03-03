@@ -12,6 +12,8 @@ The Python SDK provides a simple and efficient way to create operation chains, b
 - **Plan Decoding**: Decode encoded plans with enhanced visualization
 - **Plan Reconstruction**: Recreate Planner objects from decoded plans
 - **Value Formatting**: Format large numbers and token amounts for readability
+- **Subplanning**: Create nested execution contexts for flash loans and callbacks
+- **State Management**: Replace or manipulate VM state for advanced operations
 
 ## Installation
 
@@ -32,20 +34,24 @@ token = Contract(ApeContract("0x6B175474E89094C44Da98b954EedeAC495271d0F"))
 vault = Contract(ApeContract("0xd8063123BBA3B480569244AE66BFE72B6c84b00d"))
 
 # Create a plan
-with Planner() as planner:
-    # Create a sequence of operations with data dependencies
-    balance = planner.add(token.balanceOf("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"))
-    shares = planner.add(vault.deposit(balance, "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"))
-    planner.add(vault.redeem(shares, "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"))
-    
-    # Display the plan as a tree
-    print(planner.show_tree())
-    
-    # Generate the encoded plan for execution
-    plan = planner.plan()
+planner = Planner()
+
+# Create a sequence of operations with data dependencies
+balance = planner.add(token.balanceOf("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"))
+shares = planner.add(vault.deposit(balance, "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"))
+planner.add(vault.redeem(shares, "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"))
+
+# Display the plan as a tree
+print(planner.show_tree())
+
+# Generate the encoded plan for execution
+plan = planner.plan()
 ```
 
+The planner will automatically create a dependency tree where outputs from one operation are used as inputs to subsequent operations.
+
 Here is an example tree visualization:
+
 ```
 Command 0: balanceOf(address holder) -> uint256 @ 0x6B175474E89094C44Da98b954EedeAC495271d0F [CALL]
   ├─ Input 0: State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
@@ -61,6 +67,150 @@ Command 2: redeem(uint256 shares, address receiver, address owner) -> uint256 @ 
   ├─ Input 1: State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
   ├─ Input 2: State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
   └─ Output: State[3] (unused)
+```
+
+## Advanced Usage
+
+### Call Types
+
+You can specify different call types for interacting with contracts:
+
+```python
+from weiroll import CallType
+
+# Default is DELEGATECALL
+result1 = planner.add(library.someFunction(arg1, arg2))
+
+# For external contracts, use CALL
+result2 = planner.add(external.someFunction(arg1, arg2).call())
+
+# For view functions, use STATICCALL
+result3 = planner.add(external.viewFunction(arg1).staticcall())
+
+# For payable functions, use CALL with value
+result4 = planner.add(payable.deposit().with_value(1000000000000000000))  # 1 ETH
+```
+
+### Subplans for Nested Execution
+
+Subplans allow you to create nested execution contexts, which are especially useful for:
+- Flash loans
+- Callbacks
+- Control flow operations
+
+```python
+from weiroll import Planner, SubplanValue
+
+# Create a subplan (inner execution context)
+subplan = Planner()
+result1 = subplan.add(token.balanceOf(user_address))
+result2 = subplan.add(token.transfer(recipient, result1))
+
+# Create the main planner
+planner = Planner()
+
+# Add the subplan to the main planner
+# The function must take a SubplanValue and the planner.state_value
+planner.addSubplan(executor.execute(SubplanValue(subplan), planner.state_value))
+
+# You can access return values from the subplan in the main planner
+planner.add(logger.logSuccess(result2))
+```
+
+### Replacing State
+
+For specialized operations, you can replace the entire planner state:
+
+```python
+# Create a planner
+planner = Planner()
+
+# Add some operations
+result = planner.add(token.transfer(recipient, amount))
+
+# Replace the state with a function call
+# The function must return bytes[]
+planner.replaceState(processor.processState(planner.state_value))
+```
+
+### Handling Complex Data Types
+
+The SDK supports various Ethereum data types:
+
+```python
+# Integers
+planner.add(contract.setValue(123))
+
+# Strings
+planner.add(contract.setName("Weiroll"))
+
+# Addresses (as hex strings)
+planner.add(contract.setAddress("0x1234567890123456789012345678901234567890"))
+
+# Byte arrays
+planner.add(contract.setData(b"\x01\x02\x03"))
+
+# Arrays
+planner.add(contract.setArray([1, 2, 3]))
+
+# Address arrays (important for swap paths)
+path = [str(token1.address), str(token2.address), str(token3.address)]
+planner.add(router.swapExactTokensForTokens(amount, 0, path, recipient, deadline))
+```
+
+## Integration with EVM Frameworks
+
+While this SDK focuses on encoding and decoding Weiroll commands, you can integrate it with your preferred EVM framework to execute them:
+
+### Ape Framework
+
+```python
+from weiroll import Planner, Contract
+from ape import Contract as ApeContract, accounts
+
+# Get your VM instance
+vm_contract = ApeContract("0x...")  # Address of deployed Weiroll VM
+
+# Create your plan
+planner = Planner()
+# ... add operations ...
+
+# Get commands and state
+plan = planner.plan()
+commands = plan["commands"]
+state = plan["state"]
+
+# Execute through ape
+account = accounts.load("my_account")
+vm_contract.execute(commands, state, sender=account)
+```
+
+### Web3.py
+
+```python
+import web3
+from weiroll import Planner, Contract
+
+# Create a web3.py instance
+w3 = web3.Web3(web3.HTTPProvider("https://..."))
+
+# Get your VM instance
+vm_address = "0x..."
+vm_abi = [...]  # ABI for the Weiroll VM
+vm_contract = w3.eth.contract(address=vm_address, abi=vm_abi)
+
+# Create your plan
+planner = Planner()
+# ... add operations ...
+
+# Get commands and state
+plan = planner.plan()
+commands = plan["commands"]
+state = plan["state"]
+
+# Execute through web3.py
+tx_hash = vm_contract.functions.execute(commands, state).transact({'from': w3.eth.accounts[0]})
+receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
 ```
 
 ## Overview of the VM
