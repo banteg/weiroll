@@ -135,11 +135,17 @@ class StateValue:
     Attributes:
         index: Index in the state array
         is_dynamic: Whether this is a dynamic type (string, bytes, array)
+        source_command: Index of the command that produced this state value (-1 if none)
+        output_of: Whether this state value is the output of a command
     """
 
     index: int
     is_dynamic: bool = False
-
+    # Track which command produced this state value (for improved visualization)
+    source_command: int = -1
+    # Flag to indicate this is an output from a command
+    output_of: bool = False
+    
     def to_arg(self) -> CommandArg:
         """
         Convert to a CommandArg for use in commands.
@@ -151,16 +157,21 @@ class StateValue:
 
     def __str__(self) -> str:
         """Return a string representation of the state value."""
-        return f"State[{self.index}]"
+        source_info = f" (from command {self.source_command})" if self.source_command >= 0 else ""
+        return f"State[{self.index}]{source_info}"
 
     def __eq__(self, other: object) -> bool:
         """Compare state values for equality."""
         if not isinstance(other, StateValue):
             return NotImplemented
+        # We only consider index and dynamic status for equality
+        # Source command doesn't affect the actual value
         return self.index == other.index and self.is_dynamic == other.is_dynamic
 
     def __hash__(self) -> int:
         """Hash function for state values."""
+        # We only hash on index and dynamic status 
+        # Source command doesn't affect the hash
         return hash((self.index, self.is_dynamic))
 
 

@@ -136,14 +136,26 @@ class Planner:
         if getattr(fn_call, "is_tuple_return", False):
             # For raw_value, we always create a state value with a bytes type
             output_type = "bytes"
-            output = StateValue(output_type, self.next_state_index)
+            # Create state value with source tracking information
+            output = StateValue(
+                index=self.next_state_index, 
+                is_dynamic=True,  # bytes is dynamic
+                # Will set source_command to current command index after we add the command
+                output_of=True
+            )
             output_arg = CommandArg(self.next_state_index)
             self.next_state_index += 1
         # Handle normal function outputs
         elif fn_call.method_abi.outputs and len(fn_call.method_abi.outputs) > 0:
             # Normal case - function has outputs defined in ABI
             output_type = fn_call.method_abi.outputs[0].type
-            output = StateValue(output_type, self.next_state_index)
+            # Create state value with source tracking information
+            output = StateValue(
+                index=self.next_state_index, 
+                is_dynamic=isinstance(output_type, (bytes, str)) or output_type in ["bytes", "string"],
+                # Will set source_command to current command index after we add the command
+                output_of=True
+            )
             output_arg = CommandArg(self.next_state_index)
             self.next_state_index += 1
 
@@ -158,7 +170,14 @@ class Planner:
             is_tuple_return=getattr(fn_call, "is_tuple_return", False),  # Get is_tuple_return flag if it exists
         )
 
+        # Add command to the list
+        command_idx = len(self.commands)
         self.commands.append(command)
+        
+        # Set source command reference for tracking dependencies if there's an output
+        if output and hasattr(output, 'source_command'):
+            output.source_command = command_idx
+            
         return output  # This might be None
 
     def addSubplan(self, fn_call: FunctionCall) -> StateValue:
@@ -489,6 +508,14 @@ class Planner:
         # Convert commands to the format expected by the renderer
         commands_for_renderer = []
         call_types = []
+        
+        # Track state value sources for better visualization
+        source_tracking = {}
+        
+        # First pass - collect StateValue objects with source_command information
+        for i, value in enumerate(self.state):
+            if isinstance(value, StateValue) and hasattr(value, "source_command") and value.source_command >= 0:
+                source_tracking[i] = value.source_command
 
         for _i, cmd in enumerate(self.commands):
             target_address = "0x" + cmd.target.hex()[-40:]
@@ -512,23 +539,38 @@ class Planner:
                     # If ape is not available or there's an error, use the default
                     pass
 
-            # Format command for renderer
-            commands_for_renderer.append(
-                {
-                    "to": target_address,
-                    "function": fn_name,
-                    "selector": selector_hex,
-                    "inputs": [arg.index for arg in cmd.inputs],
-                    "outputs": [cmd.output.index] if cmd.output and cmd.output.index != ArgType.USE_STATE else [],
-                    "command_type": cmd.command_type.name,
-                }
-            )
+            # Format command for renderer with enhanced tracking info
+            command_dict = {
+                "to": target_address,
+                "function": fn_name,
+                "selector": selector_hex,
+                "inputs": [arg.index for arg in cmd.inputs],
+                "outputs": [cmd.output.index] if cmd.output and cmd.output.index != ArgType.USE_STATE else [],
+                "command_type": cmd.command_type.name,
+            }
+            
+            # Add source tracking info for command inputs
+            input_sources = []
+            for arg in cmd.inputs:
+                # Check if this input has a known source
+                if isinstance(arg.index, int) and arg.index in source_tracking:
+                    input_sources.append(source_tracking[arg.index])
+                else:
+                    input_sources.append(-1)  # No known source
+            command_dict["input_sources"] = input_sources
+                
+            commands_for_renderer.append(command_dict)
+            
             # Handle both enum and int call types for backward compatibility
             if hasattr(cmd.call_type, "name"):
                 call_types.append(cmd.call_type.name)
             else:
                 # Convert int to enum
                 call_types.append(CallType(cmd.call_type).name)
+            
+            # Track sources for output values
+            if cmd.output and cmd.output.index != ArgType.USE_STATE:
+                source_tracking[cmd.output.index] = _i
 
-        # Use the common renderer
+        # Use the common renderer with enhanced tracking info
         return render_tree(commands_for_renderer, self.state, call_types, use_color=use_color)

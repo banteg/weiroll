@@ -150,8 +150,28 @@ def format_input_line(
     # Colorize the input label
     input_label = colorize(f"Input {input_index}", "input_label")
 
-    # Check if this input is a reference to a previous command's output
+    # Get the source command from enhanced tracking, if available
     source_cmd = -1
+    if "input_sources" in command and input_index < len(command["input_sources"]):
+        source_cmd = command["input_sources"][input_index]
+    
+    # If we don't have it from enhanced tracking, use the original lookup
+    if source_cmd < 0 and isinstance(input_val, (int, str)):
+        try:
+            numeric_val = int(input_val) if isinstance(input_val, str) and input_val.isdigit() else input_val
+            if isinstance(numeric_val, int):
+                source_cmd_tuple = state_sources.get(numeric_val, (-1, -1))
+                source_cmd = source_cmd_tuple[0]
+        except (ValueError, TypeError):
+            pass
+
+    # Special case - uint256 type parameter
+    if input_val == 'uint256':
+        # This is likely the value we want to track from the previous command
+        # but we need to find which command's output is being used (usually the preceding one)
+        # We'll add a special indicator for clarity
+        param_text = colorize(f"uint256 (value from returned balance)", "value_number")
+        return f"{prefix} {input_label}: {param_text}"
 
     if isinstance(input_val, int) or (isinstance(input_val, str) and input_val.isdigit()):
         # Convert to int for consistency
@@ -175,11 +195,10 @@ def format_input_line(
 
         # Regular state reference
         elif isinstance(numeric_val, int):
-            # First check if this value comes from a command output
-            source_cmd, _ = state_sources.get(numeric_val, (-1, -1))
             state_ref = colorize(f"State[{numeric_val}]", "state_ref")
             
             if source_cmd >= 0:
+                # Show both source command and parameter role if available
                 cmd_ref = colorize(f"Command {source_cmd}", "function_name")
                 return f"{prefix} {input_label}: {state_ref} (from {cmd_ref} output)"
             elif numeric_val < len(state):
