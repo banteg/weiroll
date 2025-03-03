@@ -82,12 +82,17 @@ class Command:
         result |= self.call_type & 0x03
         return result
 
-    def encode(self) -> bytes:
+    def encode(self) -> list[bytes]:
         """Encode the command as bytes32.
         
         If the command has more than 6 inputs (extended inputs), the first 6 will be
-        encoded in the command itself. Use encode_extended_inputs() to get the additional
-        encoding for the extended inputs.
+        encoded in the command itself, and the extended inputs will be included as a
+        second item in the returned list.
+        
+        Returns:
+            list[bytes]: A list containing either:
+              - [main_command_bytes] for standard commands
+              - [main_command_bytes, extended_inputs_bytes] for commands with extended inputs
         """
         # Ensure function selector is 4 bytes
         selector = self.function_selector[:4].ljust(4, b"\x00")
@@ -111,11 +116,39 @@ class Command:
         target = self.target[-20:].rjust(20, b"\x00")
 
         # Combine all parts for the main command
-        return selector + flags + padded_inputs + output_byte + target
+        main_command = selector + flags + padded_inputs + output_byte + target
+        
+        # If this has extended inputs, include them as a second item in the list
+        if self.extended_inputs:
+            extended_inputs = self.encode_extended_inputs()
+            return [main_command, extended_inputs]
+        
+        # Return just the main command for standard commands
+        return [main_command]
 
     @classmethod
-    def decode(cls, data: bytes | str) -> "Command":
-        """Decode a bytes32 command."""
+    def decode(cls, data: bytes | str | list) -> "Command":
+        """Decode a bytes32 command or command list.
+        
+        Args:
+            data: Can be:
+                - bytes: A single command as bytes32
+                - str: A hex string representing a bytes32 command
+                - list: A list of bytes objects from the encode() method, which may include extended inputs
+                
+        Returns:
+            Command: The fully decoded command
+        """
+        # Handle list input (from the new encode method)
+        extended_inputs_data = None
+        if isinstance(data, list):
+            # First element is always the main command
+            if len(data) > 1:
+                # Second element contains extended inputs data
+                extended_inputs_data = data[1]
+            # Use the first element as the main command data
+            data = data[0]
+            
         if isinstance(data, str):
             data = to_bytes(hexstr=data)
 
@@ -161,9 +194,20 @@ class Command:
         # Parse output
         output = None if output_byte == ArgType.END_OF_ARGS else CommandArg.from_byte(output_byte)
 
-        # Handle extended inputs case - we need to create a command with enough inputs
-        # to trigger the extended_inputs property to return True
-        if has_extended_inputs:
+        # Process extended inputs if provided in the list
+        if extended_inputs_data is not None and has_extended_inputs:
+            # Parse the extended inputs data: 
+            # - 4 bytes: Special marker
+            # - 1 byte: Number of extended inputs
+            # - Remaining bytes: Extended inputs
+            num_extended = extended_inputs_data[4]
+            for i in range(5, 5 + num_extended):
+                # Skip any empty bytes
+                if i >= len(extended_inputs_data) or extended_inputs_data[i] == 0:
+                    break
+                inputs.append(CommandArg.from_byte(extended_inputs_data[i]))
+        # Handle the case where we need dummy inputs for the extended_inputs property
+        elif has_extended_inputs and extended_inputs_data is None:
             # We need more than 6 inputs to get extended_inputs=True from the property
             # Just add some dummy inputs that will be replaced later
             while len(inputs) <= 6:
@@ -183,8 +227,11 @@ class Command:
         Encode extended inputs (inputs beyond the first 6) as a separate bytes32.
         
         When a command has more than 6 inputs, this method creates a special command
-        containing the additional inputs. This command should follow the main command
-        in the final encoding.
+        containing the additional inputs. This command is included as the second
+        element in the list returned by the encode() method.
+        
+        Note: This method is now primarily used internally by encode() and
+        should generally not be called directly.
         
         Returns:
             bytes: 32-byte encoding of the extended inputs, or empty bytes if no extended inputs

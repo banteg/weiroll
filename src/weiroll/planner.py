@@ -1,16 +1,14 @@
-from typing import Any, Dict, Literal, Optional, Set, Tuple
 import logging
-from eth_abi import encode
-from eth_abi.exceptions import EncodingError
-from eth_utils import to_hex
+from typing import Any, Dict, Literal, Set
 
 from ape import Contract as ApeContract
+from eth_abi import encode
+from eth_abi.exceptions import EncodingError
 
 from .command import Command, CommandArg
 from .constants import ArgType, CallType, CommandType
 from .contract import FunctionCall, StateValue, SubplanValue
 from .utils.tree_renderer import render_tree
-
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -387,15 +385,15 @@ class Planner:
             
             # All inputs should be resolved at this point
             # Encode the command
-            encoded_cmd = "0x" + cmd.encode().hex()
+            encoded_bytes = cmd.encode()
+            # First element is always the main command
+            encoded_cmd = "0x" + encoded_bytes[0].hex()
             encoded_commands.append(encoded_cmd)
             
-            # If this command has extended inputs (more than 6), add extended inputs command
-            if cmd.extended_inputs:
-                extended_inputs_cmd = cmd.encode_extended_inputs()
-                if extended_inputs_cmd:
-                    # Add the extended inputs command
-                    encoded_commands.append("0x" + extended_inputs_cmd.hex())
+            # If this command has extended inputs (more than 6), the second element will be the extended inputs
+            if len(encoded_bytes) > 1:
+                # Add the extended inputs command
+                encoded_commands.append("0x" + encoded_bytes[1].hex())
 
         # Encode state values
         for i, value in enumerate(self.state):

@@ -39,7 +39,9 @@ def test_command_encoding():
     )
 
     encoded = cmd.encode()
-    assert len(encoded) == 32  # Must be 32 bytes
+    assert isinstance(encoded, list)
+    assert len(encoded) == 1  # For regular commands, list has 1 element
+    assert len(encoded[0]) == 32  # The command itself must be 32 bytes
 
     # Decode and verify
     decoded = Command.decode(encoded)
@@ -85,3 +87,54 @@ def test_command_with_calltype():
     encoded_value = value_cmd.encode()
     decoded_value = Command.decode(encoded_value)
     assert decoded_value.call_type == CallType.VALUECALL
+
+
+def test_command_with_extended_inputs():
+    # Create a command with more than 6 inputs
+    selector = function_signature_to_4byte_selector("complexFunction(uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)")
+    target = to_bytes(hexstr="0x1234567890123456789012345678901234567890")
+    
+    # Create 8 inputs (more than the 6 allowed in a single command)
+    inputs = [CommandArg(index=i) for i in range(8)]
+    
+    # Output at state index 10
+    output = CommandArg(index=10)
+    
+    cmd = Command(
+        function_selector=selector,
+        target=target,
+        inputs=inputs,
+        output=output
+    )
+    
+    # Verify this is an extended inputs command
+    assert cmd.extended_inputs
+    
+    # Encode the command
+    encoded = cmd.encode()
+    
+    # Verify the encoding produced a list with 2 elements
+    assert isinstance(encoded, list)
+    assert len(encoded) == 2
+    assert len(encoded[0]) == 32  # Main command is 32 bytes
+    assert len(encoded[1]) == 32  # Extended inputs command is 32 bytes
+    
+    # The first 4 bytes of the extended inputs command should be the special marker
+    assert encoded[1][0:4] == b"\xFF\xFF\xFF\xFF"
+    # The 5th byte should be the number of extended inputs (2 in this case)
+    assert encoded[1][4] == 2
+    
+    # Now decode the command
+    decoded = Command.decode(encoded)
+    
+    # Verify the decoded command matches the original
+    assert decoded.function_selector == selector
+    assert decoded.target == target
+    assert len(decoded.inputs) == 8  # Should have all 8 inputs
+    
+    # Check all input indices are correct
+    for i, arg in enumerate(decoded.inputs):
+        assert arg.index == i
+    
+    # Check output index
+    assert decoded.output.index == 10
