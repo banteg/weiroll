@@ -2,13 +2,16 @@
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ape import Contract as ApeContract
+from ape.contracts import Contract as ApeContract
 from ape.contracts.base import _select_method_abi
 from eth_utils import to_bytes
 from eth_utils.crypto import keccak
 from ethpm_types import MethodABI
+
+if TYPE_CHECKING:
+    from weiroll.planner import Planner
 
 from .command import CommandArg
 from .constants import CallType

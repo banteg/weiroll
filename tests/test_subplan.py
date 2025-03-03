@@ -163,16 +163,15 @@ def test_validation_errors():
     
     # Test that you can't add a SubplanValue with regular add
     with pytest.raises(ValueError, match=".*SubplanValue.*"):
-        planner.add(DummyFunctionCall(args=[SubplanValue(0, [])]))
+        # Create a temporary planner for the subplan
+        subplan_planner = Planner()
+        planner.add(DummyFunctionCall(args=[SubplanValue(subplan_planner)]))
     
     # Test that you can't addSubplan with a non-Planner
-    with pytest.raises(TypeError, match=".*Planner.*"):
-        planner.addSubplan("not a planner")
-    
-    # Test that you can't addSubplan with a Planner and invalid args
-    subplan = Planner()
-    with pytest.raises(TypeError, match=".*must be a dictionary.*"):
-        planner.addSubplan(subplan, "not a dict")
+    with pytest.raises(ValueError, match=".*take planner and state.*"):
+        # Create a dummy function call for addSubplan
+        dummy_fn = DummyFunctionCall(args=["not a planner"])
+        planner.addSubplan(dummy_fn)
 
 
 def test_circular_reference():
@@ -242,5 +241,10 @@ class DummyFunctionCall:
         class DummyABIOutput:
             def __init__(self):
                 self.canonical_type = "bytes[]"
-        
+                
+        class DummyFn:
+            def __init__(self):
+                self.value = 0
+                
         self.method_abi = DummyMethodABI(has_output)
+        self.fn = DummyFn()

@@ -153,36 +153,38 @@ class Planner:
         self.commands.append(command)
         return output  # This might be None
 
-    def addSubplan(self, fn_call: FunctionCall) -> None:
-        """
-        Add a call to a subplan. This executes a nested instance of the Weiroll VM.
+    def addSubplan(self, fn_call: FunctionCall) -> StateValue:
+        """Add a function call with a subplan as an argument.
 
-        Subplans are commonly used for:
-        - Flashloans
-        - Control flow
-        - Callback-based operations
-
-        A function call passed to addSubplan must:
-        - Take a SubplanValue (created from a Planner) as one argument
-        - Take the planner.state_value as another argument
-        - Return either nothing or a bytes[] that will replace the parent planner state
+        This allows creating nested execution plans, which can be used for
+        implementing control flow, flashloans, and other callback-based operations.
 
         Args:
-            fn_call: The function call containing the subplan
+            fn_call: A function call with a SubplanValue as one of its arguments
 
-        Example:
+        Returns:
+            StateValue: The output value of the function call
+
+        Examples:
             ```python
-            # Create main planner
-            planner = Planner()
+            # Implement a flashloan pattern
+            flashloan = Contract(flashloan_contract)
 
-            # Create subplan
+            # Create a subplan for the flashloan
             subplan = Planner()
-            subplan.add(token.transfer(recipient, amount))
+            subplan.add(token.transfer(recipient, 1000))
+            subplan.add(token.approve(dex_router, 500))
+            subplan.add(dex_router.swapExactTokensForTokens(...))
 
             # Add subplan to the main planner
             planner.addSubplan(flashloan.execute(subplan, planner.state_value))
             ```
         """
+        # Validate input - ensure required attributes exist
+        for attr in ["args", "call_type", "fn"]:
+            if not hasattr(fn_call, attr):
+                raise TypeError(f"Expected a FunctionCall-like object with '{attr}' attribute")
+                
         # Check for subplan and state arguments
         has_subplan = False
         has_state = False
