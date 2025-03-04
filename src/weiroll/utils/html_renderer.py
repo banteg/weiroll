@@ -288,31 +288,93 @@ def render_html(
 .weiroll-plan div { margin: 0; padding: 0; }
 .weiroll-plan .command-row { display: flex; flex-wrap: wrap; align-items: baseline; padding: 2px 0; }
 .weiroll-plan .command-inputs-container, .weiroll-plan .command-outputs-container { position: relative; }
-.weiroll-plan .command-inputs-container::before {
-  content: "";
+/* Tree view CSS based on Kate Morley's tree view implementation */
+.weiroll-plan .tree {
+  --spacing: 1.5rem;
+  --radius: 10px;
+}
+
+.weiroll-plan .tree li {
+  display: block;
+  position: relative;
+  padding-left: calc(2 * var(--spacing) - var(--radius) - 2px);
+}
+
+.weiroll-plan .tree ul {
+  margin-left: calc(var(--radius) - var(--spacing));
+  padding-left: 0;
+}
+
+.weiroll-plan .tree ul li {
+  border-left: 2px solid var(--weiroll-tree-branch);
+}
+
+.weiroll-plan .tree ul li:last-child {
+  border-color: transparent;
+}
+
+.weiroll-plan .tree ul li::before {
+  content: '';
+  display: block;
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 10px;
-  width: 1px;
+  top: calc(var(--spacing) / -2);
+  left: -2px;
+  width: calc(var(--spacing) + 2px);
+  height: calc(var(--spacing) + 1px);
+  border: solid var(--weiroll-tree-branch);
+  border-width: 0 0 2px 2px;
+}
+
+.weiroll-plan .tree li::after {
+  content: '';
+  display: block;
+  position: absolute;
+  top: calc(var(--spacing) / 2 - var(--radius));
+  left: calc(var(--spacing) - var(--radius) - 1px);
+  width: calc(2 * var(--radius));
+  height: calc(2 * var(--radius));
+  border-radius: 50%;
+  background: var(--weiroll-tree-branch);
+  z-index: 0;
+}
+
+/* Simple tree view without collapsible functionality */
+.weiroll-plan .tree-simple li {
+  display: block;
+  position: relative;
+  padding-left: 1.2em;
+  margin-bottom: 0.5em;
+}
+
+.weiroll-plan .tree-simple li::before {
+  content: '';
+  display: block;
+  position: absolute;
+  top: 0.5em;
+  left: 0;
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: 50%;
   background-color: var(--weiroll-tree-branch);
 }
-.weiroll-plan .tree-branch { position: relative; width: 24px; margin-right: 8px; flex-shrink: 0; }
-.weiroll-plan .tree-branch::before { 
-  content: ""; 
-  position: absolute; 
-  top: 0.6em; 
-  left: 10px; 
-  display: block; 
-  width: 14px; 
-  height: 1px; 
-  background-color: var(--weiroll-tree-branch); 
+
+.weiroll-plan .tree-simple li:last-child {
+  margin-bottom: 0;
 }
-.weiroll-plan .tree-branch-mid::after { 
-  content: none; /* The vertical line is drawn by the container */
+
+/* Command styling */
+.weiroll-plan .command-row {
+  padding: 0.1em 0;
 }
-.weiroll-plan .tree-branch-last::after { 
-  content: none; /* The vertical line is drawn by the container */
+
+.weiroll-plan .command-header {
+  margin-top: 1.5em;
+  padding-bottom: 0.5em;
+}
+
+.weiroll-plan .command-container {
+  margin-bottom: 1.5em;
+  padding-left: 0.5em;
 }
 .weiroll-plan .command-separator { height: 10px; }
 .weiroll-plan .command-header { font-weight: bold; color: var(--weiroll-command-header); margin-top: 10px; }
@@ -405,81 +467,84 @@ function clearHighlight() {
     <span class='command-type'>[{% if cmd.command_type != "CALL" %}{{ cmd.call_type }}, {{ cmd.command_type }}]{% else %}{{ cmd.call_type }}]{% endif %}</span>
   </div>
   
-  {# Process inputs #}
-  <div class="command-inputs-container">
-  {% for input in cmd.inputs %}
-    <div class="command-row" data-command-idx='{{ cmd.index }}'{% if input.is_state_ref and input.numeric_val is defined %} data-state-used='{{ input.numeric_val }}'{% endif %}>
-      <span class='tree-branch {% if input.is_last and not cmd.outputs %}tree-branch-last{% else %}tree-branch-mid{% endif %}'></span>
-      <span class='input-label'>{{ input.input_label }}:</span>
-      
-      {% if input.is_state_ref is defined and input.is_state_ref %}
-        {# State reference #}
-        <span class='{{ input.state_color_class }}' data-state-ref='{{ input.numeric_val }}' 
-              onmouseover='highlightState({{ input.numeric_val }})' 
-              onmouseout='clearHighlight()'>State[{{ input.numeric_val }}]</span>
-        
-        {% if input.has_source is defined and input.has_source %}
-          <span>(from <span class='function-name'>Command {{ input.source_cmd }}</span> output)</span>
-        {% elif input.is_initial_state is defined and input.is_initial_state %}
-          <span>= <span class='{{ input.value_class }}'>{{ input.value_formatted }}</span></span>
-        {% endif %}
-        
-      {% elif input.is_special_value is defined and input.is_special_value %}
-        {# Special value (negative index) #}
-        {% if input.is_subplan is defined and input.is_subplan %}
-          {% if input.numeric_val == -1 %}
-          <span class='subplan'>&lt;Subplan&gt;</span>
-          {% else %}
-          <span class='subplan'>&lt;Special Value: {{ input.numeric_val }}&gt;</span>
-          {% endif %}
-        {% else %}
-          <span class='state-ref'>&lt;Special Value: {{ input.numeric_val }}&gt;</span>
-        {% endif %}
-        
-      {% else %}
-        {# Regular value #}
-        <span class='value-string'>{{ input.value_text if input.value_text is defined else input.value }}</span>
-      {% endif %}
-    </div>
-  {% endfor %}
-  </div>
-  
-  {# Process outputs #}
-  {% if cmd.outputs %}
-  <div class="command-outputs-container">
-  {% for output in cmd.outputs %}
-    <div class="command-row" data-command-idx='{{ cmd.index }}' data-state-source='{{ output.numeric_val }}'>
-      <span class='tree-branch tree-branch-last'></span>
-      <span class='output-label'>{{ output.output_label }}:</span>
-      
-      <span class='state-{{ output.color_idx }}' data-state-ref='{{ output.numeric_val }}' 
-            onmouseover='highlightState({{ output.numeric_val }})' 
-            onmouseout='clearHighlight()'>State[{{ output.numeric_val }}]</span>
-      
-      {% if output.usage_details %}
-        <span class='arrow'>→</span>
-        {% if output.usage_details|length == 1 %}
-          {% set usage = output.usage_details[0] %}
-          <span class='function-name'>Command {{ usage.cmd_idx }}</span>
-          {% if usage.fn_name and usage.param_name %}
-          <span>(<span class='param-name' data-state-arg='{{ output.numeric_val }}'>{{ usage.fn_name }} {{ usage.param_full }}</span>)</span>
-          {% endif %}
-        {% else %}
-          {% for usage in output.usage_details %}
-            {% if not loop.first %}<span>, </span>{% endif %}
-            <span class='function-name'>Command {{ usage.cmd_idx }}</span>
-            {% if usage.fn_name and usage.param_name %}
-            <span>(<span class='param-name' data-state-arg='{{ output.numeric_val }}'>{{ usage.fn_name }} {{ usage.param_full }}</span>)</span>
-            {% endif %}
+  {# Process inputs and outputs in a Kate Morley-style tree view #}
+  <div class="command-container">
+    <ul class="tree">
+      <li>
+        <ul>
+          {# Process inputs #}
+          {% for input in cmd.inputs %}
+            <li class="command-row" data-command-idx='{{ cmd.index }}'{% if input.is_state_ref and input.numeric_val is defined %} data-state-used='{{ input.numeric_val }}'{% endif %}>
+              <span class='input-label'>{{ input.input_label }}:</span>
+              
+              {% if input.is_state_ref is defined and input.is_state_ref %}
+                {# State reference #}
+                <span class='{{ input.state_color_class }}' data-state-ref='{{ input.numeric_val }}' 
+                      onmouseover='highlightState({{ input.numeric_val }})' 
+                      onmouseout='clearHighlight()'>State[{{ input.numeric_val }}]</span>
+                
+                {% if input.has_source is defined and input.has_source %}
+                  <span>(from <span class='function-name'>Command {{ input.source_cmd }}</span> output)</span>
+                {% elif input.is_initial_state is defined and input.is_initial_state %}
+                  <span>= <span class='{{ input.value_class }}'>{{ input.value_formatted }}</span></span>
+                {% endif %}
+                
+              {% elif input.is_special_value is defined and input.is_special_value %}
+                {# Special value (negative index) #}
+                {% if input.is_subplan is defined and input.is_subplan %}
+                  {% if input.numeric_val == -1 %}
+                  <span class='subplan'>&lt;Subplan&gt;</span>
+                  {% else %}
+                  <span class='subplan'>&lt;Special Value: {{ input.numeric_val }}&gt;</span>
+                  {% endif %}
+                {% else %}
+                  <span class='state-ref'>&lt;Special Value: {{ input.numeric_val }}&gt;</span>
+                {% endif %}
+                
+              {% else %}
+                {# Regular value #}
+                <span class='value-string'>{{ input.value_text if input.value_text is defined else input.value }}</span>
+              {% endif %}
+            </li>
           {% endfor %}
-        {% endif %}
-      {% else %}
-        <span class='unused'>(unused in future commands)</span>
-      {% endif %}
-    </div>
-  {% endfor %}
+          
+          {# Process outputs #}
+          {% if cmd.outputs %}
+            {% for output in cmd.outputs %}
+              <li class="command-row" data-command-idx='{{ cmd.index }}' data-state-source='{{ output.numeric_val }}'>
+                <span class='output-label'>{{ output.output_label }}:</span>
+                
+                <span class='state-{{ output.color_idx }}' data-state-ref='{{ output.numeric_val }}' 
+                      onmouseover='highlightState({{ output.numeric_val }})' 
+                      onmouseout='clearHighlight()'>State[{{ output.numeric_val }}]</span>
+                
+                {% if output.usage_details %}
+                  <span class='arrow'>→</span>
+                  {% if output.usage_details|length == 1 %}
+                    {% set usage = output.usage_details[0] %}
+                    <span class='function-name'>Command {{ usage.cmd_idx }}</span>
+                    {% if usage.fn_name and usage.param_name %}
+                    <span>(<span class='param-name' data-state-arg='{{ output.numeric_val }}'>{{ usage.fn_name }} {{ usage.param_full }}</span>)</span>
+                    {% endif %}
+                  {% else %}
+                    {% for usage in output.usage_details %}
+                      {% if not loop.first %}<span>, </span>{% endif %}
+                      <span class='function-name'>Command {{ usage.cmd_idx }}</span>
+                      {% if usage.fn_name and usage.param_name %}
+                      <span>(<span class='param-name' data-state-arg='{{ output.numeric_val }}'>{{ usage.fn_name }} {{ usage.param_full }}</span>)</span>
+                      {% endif %}
+                    {% endfor %}
+                  {% endif %}
+                {% else %}
+                  <span class='unused'>(unused in future commands)</span>
+                {% endif %}
+              </li>
+            {% endfor %}
+          {% endif %}
+        </ul>
+      </li>
+    </ul>
   </div>
-  {% endif %}
   
   {% if not loop.last %}
   <div class="command-separator"></div>
