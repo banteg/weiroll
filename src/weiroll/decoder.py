@@ -286,26 +286,6 @@ class Decoder:
 
         planner.__str__ = MethodType(enhanced_str, planner)
 
-        # Ensure the _repr_html_ method is also available for notebook display
-        if not hasattr(planner, "_repr_html_"):
-
-            def repr_html(self):
-                """Generate HTML representation for decoded planners using rich"""
-                # For decoded planners, we need to make sure each command has function_info
-                # and that contract_name is accessible
-
-                # Check if we have any commands
-                if not self.commands:
-                    return "<div class='weiroll-plan'><p><em>Empty plan (no commands)</em></p></div>"
-
-                # Use the built-in _repr_html_ method from the Planner class
-                # This will ensure consistent rendering between regular and decoded planners
-                # The _repr_html_ method in Planner will detect that this is a decoded planner
-                # and use the appropriate rendering
-                return self.__class__._repr_html_(self)
-
-            planner._repr_html_ = MethodType(repr_html, planner)
-
         return planner
 
     @staticmethod
