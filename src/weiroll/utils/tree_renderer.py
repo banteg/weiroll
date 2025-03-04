@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from eth_utils import to_checksum_address
 
-from .formatters import format_value
+from .formatters import format_contract_name, format_value
 from .terminal_colors import colorize, colorize_state_ref, get_color_mode
 
 # Tree drawing characters
@@ -120,9 +120,13 @@ def format_command_header(command: Dict[str, Any], index: int, call_type: str) -
     # Format contract name and address
     contract_line = ""
     contract_indent = TREE_CHARS["contract_indent"]
-    if contract_name:
+    
+    # Format contract name, with special handling for bytes-like names (e.g., Maker)
+    formatted_name = format_contract_name(contract_name) if contract_name else ""
+    
+    if formatted_name:
         # Show both name and address
-        colored_name = colorize(contract_name, "function_name")
+        colored_name = colorize(formatted_name, "function_name")
         colored_address = colorize(target_formatted, "address")
         contract_line = f"{colored_name} @ {colored_address}"
     else:
