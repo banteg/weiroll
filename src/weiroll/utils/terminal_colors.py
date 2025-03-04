@@ -47,28 +47,27 @@ COLORS = {
     "RESET": "\033[0m",
 }
 
-# Convert Glasbey high-visibility colors to ANSI escape sequences
-def rgb_to_ansi_256(r: float, g: float, b: float) -> str:
-    """Convert RGB color to ANSI 256-color escape sequence.
+# Convert hex color string to ANSI escape sequence
+def hex_to_ansi_256(hex_color: str) -> str:
+    """Convert a hex color string to ANSI 256-color escape sequence.
     
     Args:
-        r, g, b: RGB values as floats in range 0-1 or integers in range 0-255
+        hex_color: Hex color string starting with # (e.g., "#d60000")
         
     Returns:
         ANSI 256-color escape sequence
     """
-    # Convert RGB values (0-1) to 0-255 range if needed
-    if isinstance(r, float) and r <= 1.0:
-        r_255 = int(r * 255)
-        g_255 = int(g * 255)
-        b_255 = int(b * 255)
-    else:
-        r_255 = int(r)
-        g_255 = int(g)
-        b_255 = int(b)
-        
+    # Strip # if present
+    if hex_color.startswith("#"):
+        hex_color = hex_color[1:]
+    
+    # Convert hex to RGB (0-255)
+    r = int(hex_color[0:2], 16)
+    g = int(hex_color[2:4], 16)
+    b = int(hex_color[4:6], 16)
+    
     # Convert RGB values (0-255) to ANSI 256-color code (16-231)
-    ansi = 16 + (36 * (r_255 // 43)) + (6 * (g_255 // 43)) + (b_255 // 43)
+    ansi = 16 + (36 * (r // 43)) + (6 * (g // 43)) + (b // 43)
     return f"\033[38;5;{ansi}m"
 
 # Generate ANSI color codes from Glasbey high-visibility colormap
@@ -78,15 +77,12 @@ def generate_glasbey_colors() -> List[str]:
     
     # Only use colorcet if it's available
     if HAS_COLORCET:
-        # cc.glasbey_hv is a high-visibility Glasbey palette provided as a list of RGB triplets
-        # Each triplet is [r, g, b] with values in range 0-1
-        for i, rgb_color in enumerate(cc.glasbey_hv):
-            # Skip the first few colors which might be too light (especially white)
+        # cc.b_glasbey_bw is the bokeh-style Glasbey palette with hex colors
+        for i, hex_color in enumerate(cc.b_glasbey_bw):
+            # Skip the first few colors which might be too light
             if i > 3:  # Start from the 4th color
-                # RGB values are provided as floats 0-1
-                r, g, b = rgb_color
                 # Add this color to our list
-                colors.append(rgb_to_ansi_256(r, g, b))
+                colors.append(hex_to_ansi_256(hex_color))
     
     return colors
 
