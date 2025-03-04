@@ -250,22 +250,29 @@ def format_input_line(
                 return f"{prefix} {input_label}{state_ref} (from {cmd_ref} output)"
             elif numeric_val < len(state):
                 # It's an initial state value
-                value_formatted = format_value(state[numeric_val])
-                # Colorize value based on type
-                if isinstance(state[numeric_val], str):
-                    if state[numeric_val].startswith("0x"):  # Likely address or bytes
-                        if len(state[numeric_val]) == 42:  # Ethereum address
-                            value_formatted = colorize(value_formatted, "value_address")
-                        else:
-                            value_formatted = colorize(value_formatted, "value_bytes")
-                    else:
-                        value_formatted = colorize(value_formatted, "value_string")
-                elif isinstance(state[numeric_val], (int, float)):
-                    value_formatted = colorize(value_formatted, "value_number")
-                elif isinstance(state[numeric_val], bool):
-                    value_formatted = colorize(value_formatted, "value_bool")
+                state_value = state[numeric_val]
                 
-                return f"{prefix} {input_label}{state_ref} = {value_formatted}"
+                # Skip empty values (which may be placeholders or explicitly 0x)
+                if state_value != "0x" and state_value != "" and state_value is not None:
+                    value_formatted = format_value(state_value)
+                    # Colorize value based on type
+                    if isinstance(state_value, str):
+                        if state_value.startswith("0x"):  # Likely address or bytes
+                            if len(state_value) == 42:  # Ethereum address
+                                value_formatted = colorize(value_formatted, "value_address")
+                            else:
+                                value_formatted = colorize(value_formatted, "value_bytes")
+                        else:
+                            value_formatted = colorize(value_formatted, "value_string")
+                    elif isinstance(state_value, (int, float)):
+                        value_formatted = colorize(value_formatted, "value_number")
+                    elif isinstance(state_value, bool):
+                        value_formatted = colorize(value_formatted, "value_bool")
+                    
+                    return f"{prefix} {input_label}{state_ref} = {value_formatted}"
+                    
+                # Fall through for empty values
+                return f"{prefix} {input_label}{state_ref}"
             else:
                 # Reference to a state that will be computed during execution
                 return f"{prefix} {input_label}{state_ref}"

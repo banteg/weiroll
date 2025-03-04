@@ -38,11 +38,11 @@ class Planner:
         self.state_value = StateValue(-1, is_dynamic=True)
         self.state_value.to_arg = lambda: CommandArg(index=-1, is_dynamic=True, is_state=True)
 
-    def _add_to_state(self, value: Any, is_dynamic: bool = False) -> int:
+    def _add_to_state(self, value: Any, is_dynamic: bool = False, deduplicate: bool = True) -> int:
         """
         Add a value to the state and return its index.
 
-        Performs deduplication by checking if the value already exists in the state.
+        Can optionally perform deduplication by checking if the value already exists in the state.
         If so, returns the existing index. Otherwise, adds the value to the state
         and returns the new index.
 
@@ -50,14 +50,20 @@ class Planner:
             value: The value to add (int, bool, str, bytes, list, etc.)
             is_dynamic: Whether the value is a dynamic type (string, bytes, array)
                         that requires special handling during encoding
+            deduplicate: Whether to deduplicate this value or always add a new entry
 
         Returns:
             int: Index of the value in the state array
         """
-        # Try to deduplicate values
-        for i, existing_value in enumerate(self.state):
-            if existing_value == value:
-                return i
+        # Don't deduplicate StateValue objects as they need to maintain their source_command relationship
+        if isinstance(value, StateValue):
+            return value.index
+            
+        # Try to deduplicate literal values if requested
+        if deduplicate:
+            for i, existing_value in enumerate(self.state):
+                if existing_value == value:
+                    return i
 
         # Add value to state
         state_index = self.next_state_index
@@ -115,7 +121,7 @@ class Planner:
         # Handle value for value calls
         if fn_call.call_type == CallType.VALUECALL and fn_call.fn.value > 0:
             # Add value as first argument
-            value_index = self._add_to_state(fn_call.fn.value)
+            value_index = self._add_to_state(fn_call.fn.value, deduplicate=True)
             input_args.append(CommandArg(index=value_index))
 
         # Process function arguments
@@ -125,8 +131,24 @@ class Planner:
                 input_args.append(arg.to_arg())
             else:
                 # Add literal value to state
+                # Always add function arguments to the state array, even if it means duplicating values
+                # This ensures proper visualization of the relationships in the tree view
                 is_dynamic = isinstance(arg, (bytes, str, list, tuple))
-                state_index = self._add_to_state(arg, is_dynamic)
+                
+                # Always store the value in the state array at the current position
+                # This fixes visualization issues with the tree renderer
+                state_index = self.next_state_index
+                self.state.append(arg)
+                self.next_state_index += 1
+                
+                # Also temporarily store the value at the original state index
+                # This is a workaround for the pad_state function
+                if arg is not None and arg != "0x" and arg != "":
+                    # Ensure this value is included in the encoded plan
+                    while len(self.state) <= state_index:
+                        self.state.append(None)
+                    self.state[state_index] = arg
+                    
                 input_args.append(CommandArg(index=state_index, is_dynamic=is_dynamic))
 
         # Find out if this call has output
@@ -224,7 +246,7 @@ class Planner:
         # Handle value for value calls
         if fn_call.call_type == CallType.VALUECALL and fn_call.fn.value > 0:
             # Add value as first argument
-            value_index = self._add_to_state(fn_call.fn.value)
+            value_index = self._add_to_state(fn_call.fn.value, deduplicate=True)
             input_args.append(CommandArg(index=value_index))
 
         # Process function arguments and check for subplan/state
@@ -250,7 +272,19 @@ class Planner:
             else:
                 # Add literal value to state
                 is_dynamic = isinstance(arg, (bytes, str, list, tuple))
-                state_index = self._add_to_state(arg, is_dynamic)
+                
+                # Always store at a new index for proper visualization
+                state_index = self.next_state_index
+                self.state.append(arg)
+                self.next_state_index += 1
+                
+                # Also ensure the value is properly stored at the state index
+                if arg is not None and arg != "0x" and arg != "":
+                    # Ensure this value is included in the encoded plan
+                    while len(self.state) <= state_index:
+                        self.state.append(None)
+                    self.state[state_index] = arg
+                
                 input_args.append(CommandArg(index=state_index, is_dynamic=is_dynamic))
 
         if not has_subplan or not has_state:
@@ -310,7 +344,7 @@ class Planner:
         # Handle value for value calls
         if fn_call.call_type == CallType.VALUECALL and fn_call.fn.value > 0:
             # Add value as first argument
-            value_index = self._add_to_state(fn_call.fn.value)
+            value_index = self._add_to_state(fn_call.fn.value, deduplicate=True)
             input_args.append(CommandArg(index=value_index))
 
         # Process function arguments
@@ -326,7 +360,19 @@ class Planner:
             else:
                 # Add literal value to state
                 is_dynamic = isinstance(arg, (bytes, str, list, tuple))
-                state_index = self._add_to_state(arg, is_dynamic)
+                
+                # Always store at a new index for proper visualization
+                state_index = self.next_state_index
+                self.state.append(arg)
+                self.next_state_index += 1
+                
+                # Also ensure the value is properly stored at the state index
+                if arg is not None and arg != "0x" and arg != "":
+                    # Ensure this value is included in the encoded plan
+                    while len(self.state) <= state_index:
+                        self.state.append(None)
+                    self.state[state_index] = arg
+                
                 input_args.append(CommandArg(index=state_index, is_dynamic=is_dynamic))
 
         # Create command
