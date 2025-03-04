@@ -224,7 +224,7 @@ def format_input_line(
         # but we need to find which command's output is being used (usually the preceding one)
         # We'll add a special indicator for clarity
         param_text = colorize(f"uint256 (value from returned balance)", "value_number")
-        return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {param_text}"
+        return f"{TREE_CHARS['contract_indent']}{prefix} {input_label} {param_text}"
 
     if isinstance(input_val, int) or (isinstance(input_val, str) and input_val.isdigit()):
         # Convert to int for consistency
@@ -238,13 +238,13 @@ def format_input_line(
             if "command_type" in command and command["command_type"] == "SUBPLAN":
                 if numeric_val == -1:  # SUBPLAN_PLACEHOLDER
                     subplan_text = colorize("<Subplan>", "subplan")
-                    return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {subplan_text}"
+                    return f"{TREE_CHARS['contract_indent']}{prefix} {input_label} {subplan_text}"
                 else:
                     special_text = colorize(f"<Special Value: {numeric_val}>", "subplan")
-                    return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {special_text}"
+                    return f"{TREE_CHARS['contract_indent']}{prefix} {input_label} {special_text}"
             else:
                 special_text = colorize(f"<Special Value: {numeric_val}>", "state_ref")
-                return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {special_text}"
+                return f"{TREE_CHARS['contract_indent']}{prefix} {input_label} {special_text}"
 
         # Regular state reference
         elif isinstance(numeric_val, int):
@@ -272,9 +272,9 @@ def format_input_line(
 
                 # Format with arrow indicating data flow from previous command
                 if function_name and param_name:
-                    return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {state_ref} <- {cmd_ref} output"
+                    return f"{TREE_CHARS['contract_indent']}{prefix} {input_label} {state_ref} <- {cmd_ref} output"
                 else:
-                    return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {state_ref} <- {cmd_ref} output"
+                    return f"{TREE_CHARS['contract_indent']}{prefix} {input_label} {state_ref} <- {cmd_ref} output"
             elif numeric_val < len(state):
                 # It's an initial state value
                 state_value = state[numeric_val]
@@ -296,17 +296,17 @@ def format_input_line(
                     elif isinstance(state_value, bool):
                         value_formatted = colorize(value_formatted, "value_bool")
 
-                    return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {state_ref} = {value_formatted}"
+                    return f"{TREE_CHARS['contract_indent']}{prefix} {input_label} {state_ref} = {value_formatted}"
 
                 # Fall through for empty values
-                return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {state_ref}"
+                return f"{TREE_CHARS['contract_indent']}{prefix} {input_label} {state_ref}"
             else:
                 # Reference to a state that will be computed during execution
-                return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {state_ref}"
+                return f"{TREE_CHARS['contract_indent']}{prefix} {input_label} {state_ref}"
 
     # Handle non-integer inputs (should be rare in the planner, more common in decoded plans)
     value_text = colorize(format_value(input_val), "value_string")
-    return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {value_text}"
+    return f"{TREE_CHARS['contract_indent']}{prefix} {input_label} {value_text}"
 
 
 def format_output_line(
@@ -433,11 +433,11 @@ def format_output_line(
                 # Use parameter name for clarity
                 param_ref = colorize(f"{param_name}", "param_name")
                 arrow = colorize("->", "tree_structure")
-                return f"{TREE_CHARS['contract_indent']}{prefix} {output_label}   {state_ref} {arrow} {cmd_ref} {fn_name}.{param_name}"
+                return f"{TREE_CHARS['contract_indent']}{prefix} {output_label} {state_ref} {arrow} {cmd_ref} {fn_name}.{param_name}"
             else:
                 cmd_ref = colorize(f"Command[{cmd_idx}]", "function_name")
                 arrow = colorize("->", "tree_structure")
-                return f"{TREE_CHARS['contract_indent']}{prefix} {output_label}   {state_ref} {arrow} {cmd_ref}"
+                return f"{TREE_CHARS['contract_indent']}{prefix} {output_label} {state_ref} {arrow} {cmd_ref}"
         else:
             # Multiple usages
             usage_strs = []
@@ -450,12 +450,12 @@ def format_output_line(
                     usage_strs.append(f"{cmd_ref}")
 
             arrow = colorize("->", "tree_structure")
-            return f"{TREE_CHARS['contract_indent']}{prefix} {output_label}   {state_ref} {arrow} " + ", ".join(
+            return f"{TREE_CHARS['contract_indent']}{prefix} {output_label} {state_ref} {arrow} " + ", ".join(
                 usage_strs
             )
     else:
         unused_msg = colorize("(unused in future commands)", "unused")
-        return f"{TREE_CHARS['contract_indent']}{prefix} {output_label}   {state_ref} {unused_msg}"
+        return f"{TREE_CHARS['contract_indent']}{prefix} {output_label} {state_ref} {unused_msg}"
 
 
 def render_tree(
