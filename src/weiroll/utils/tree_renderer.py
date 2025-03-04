@@ -7,11 +7,11 @@ from .terminal_colors import colorize, colorize_state_ref, get_color_mode
 
 # Tree drawing characters
 TREE_CHARS = {
-    "branch": "    ├─",  # For most items in a list
-    "last": "    └─",  # For the last item in a list
-    "vertical": "    │ ",  # Vertical continuation
-    "empty": "      ",  # Empty space
-    "contract_indent": "  ",  # Indentation for contract info line
+    "branch": "├─",  # For most items in a list
+    "last": "└─",  # For the last item in a list
+    "vertical": "│ ",  # Vertical continuation
+    "empty": "  ",  # Empty space
+    "contract_indent": "    ",  # Indentation for contract info line
 }
 
 
@@ -98,45 +98,51 @@ def format_command_header(command: Dict[str, Any], index: int, call_type: str) -
     contract_name = command.get("contract_name", "")
 
     # Colorize based on call type
-    color_key = f"command_header_{call_type.lower()}" if call_type.lower() in ["call", "staticcall", "delegatecall"] else "command_header"
-    
+    color_key = (
+        f"command_header_{call_type.lower()}"
+        if call_type.lower() in ["call", "staticcall", "delegatecall"]
+        else "command_header"
+    )
+
     # Get parts to colorize separately
-    command_index = f"Command {index}"
-    function_part = function_formatted
-    type_part = f"[{call_type}"
-    
-    # Handle command type
-    command_type = command.get("command_type", "CALL")
-    if command_type != "CALL":
-        type_part += f", {command_type}]"
-    else:
-        type_part += "]"
-        
-    # Colorize each part
-    colored_command_index = colorize(command_index, color_key)
-    colored_function = colorize(function_part, "function_name")
-    colored_type = colorize(type_part, color_key)
-    
-    # Format contract name and address
-    contract_line = ""
-    contract_indent = TREE_CHARS["contract_indent"]
-    
+    command_index = f"Command[{index}]"
+
     # Format contract name, with special handling for bytes-like names (e.g., Maker)
     formatted_name = format_contract_name(contract_name) if contract_name else ""
-    
+
+    # First line with command index, contract name and address, and call type
+    header_line = ""
     if formatted_name:
         # Show both name and address
         colored_name = colorize(formatted_name, "function_name")
         colored_address = colorize(target_formatted, "address")
-        contract_line = f"{colored_name} @ {colored_address}"
+        header_line = f"{colorize(command_index, color_key)}: {colored_name} @ {colored_address} {colorize(f'[{call_type}]', color_key)}"
     else:
-        # Just show address on its own line
+        # Just show address
         colored_address = colorize(target_formatted, "address")
-        contract_line = f"@ {colored_address}"
-    
-    # Return a multi-line header with contract info on first line, function on second
-    # Note: Swapped order - contract first, then function
-    return f"{colored_command_index}: {contract_line}\n{contract_indent}{contract_indent}{colored_function} {colored_type}"
+        header_line = (
+            f"{colorize(command_index, color_key)}: @ {colored_address} {colorize(f'[{call_type}]', color_key)}"
+        )
+
+    # Extract function name and parameters for second line
+    function_name = function_formatted
+    return_type = ""
+
+    # Check if function has a return type indicated by ->
+    if "->" in function_formatted:
+        parts = function_formatted.split("->")
+        function_name = parts[0].strip()
+        return_type = parts[1].strip()
+
+    # Format the function signature line with return type
+    function_line = ""
+    if return_type:
+        function_line = f"{TREE_CHARS['contract_indent']}{colorize(function_name, 'function_name')} -> {colorize(return_type, 'output_label')}"
+    else:
+        function_line = f"{TREE_CHARS['contract_indent']}{colorize(function_name, 'function_name')}"
+
+    # Return a multi-line header
+    return f"{header_line}\n{function_line}"
 
 
 def format_input_line(
@@ -147,6 +153,7 @@ def format_input_line(
     command: Dict[str, Any],
     state_sources: Dict[int, Tuple[int, int]],
     state: List[Any],
+    commands: List[Dict[str, Any]],
 ) -> str:
     """
     Format a single input line for the command.
@@ -171,7 +178,7 @@ def format_input_line(
     # Try to get parameter information from function signature if available
     param_type = ""
     param_name = ""
-    
+
     if "function" in command:
         function_sig = command.get("function", "")
         if "(" in function_sig and ")" in function_sig:
@@ -187,20 +194,20 @@ def format_input_line(
                     param_name = param_parts[1] if len(param_parts) > 1 else ""
                 else:
                     param_type = param
-    
-    # Create input label with parameter type and name instead of "Input X:"
+
+    # Create input label with parameter type and name
     if param_type and param_name:
-        input_label = colorize(f"{param_type} {param_name}:".ljust(18), "input_label")
+        input_label = colorize(f"{param_type} {param_name}:", "input_label")
     elif param_type:
-        input_label = colorize(f"{param_type}:".ljust(18), "input_label")
+        input_label = colorize(f"{param_type}:", "input_label")
     else:
-        input_label = colorize(f"Input {input_index}:".ljust(18), "input_label")
+        input_label = colorize(f"Input {input_index}:", "input_label")
 
     # Get the source command from enhanced tracking, if available
     source_cmd = -1
     if "input_sources" in command and input_index < len(command["input_sources"]):
         source_cmd = command["input_sources"][input_index]
-    
+
     # If we don't have it from enhanced tracking, use the original lookup
     if source_cmd < 0 and isinstance(input_val, (int, str)):
         try:
@@ -212,12 +219,12 @@ def format_input_line(
             pass
 
     # Special case - uint256 type parameter
-    if input_val == 'uint256':
+    if input_val == "uint256":
         # This is likely the value we want to track from the previous command
         # but we need to find which command's output is being used (usually the preceding one)
         # We'll add a special indicator for clarity
         param_text = colorize(f"uint256 (value from returned balance)", "value_number")
-        return f"{prefix} {input_label} {param_text}"
+        return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {param_text}"
 
     if isinstance(input_val, int) or (isinstance(input_val, str) and input_val.isdigit()):
         # Convert to int for consistency
@@ -231,27 +238,47 @@ def format_input_line(
             if "command_type" in command and command["command_type"] == "SUBPLAN":
                 if numeric_val == -1:  # SUBPLAN_PLACEHOLDER
                     subplan_text = colorize("<Subplan>", "subplan")
-                    return f"{prefix} {input_label} {subplan_text}"
+                    return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {subplan_text}"
                 else:
                     special_text = colorize(f"<Special Value: {numeric_val}>", "subplan")
-                    return f"{prefix} {input_label} {special_text}"
+                    return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {special_text}"
             else:
                 special_text = colorize(f"<Special Value: {numeric_val}>", "state_ref")
-                return f"{prefix} {input_label} {special_text}"
+                return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {special_text}"
 
         # Regular state reference
         elif isinstance(numeric_val, int):
             # Use state-based color coding
             state_ref = colorize_state_ref(f"State[{numeric_val}]", numeric_val)
-            
+
             if source_cmd >= 0:
-                # Show both source command and parameter role if available
-                cmd_ref = colorize(f"Command {source_cmd}", "function_name")
-                return f"{prefix} {input_label}{state_ref} (from {cmd_ref} output)"
+                # Show source command with parameter role if available
+                cmd_ref = colorize(f"Command[{source_cmd}]", "function_name")
+
+                # Try to get the function name and parameter name from the source command
+                function_name = ""
+                param_name = ""
+                if source_cmd < len(commands):
+                    source_command = commands[source_cmd]
+                    function_name = source_command.get("function", "").split("(")[0]
+
+                    # Try to get the output parameter name
+                    if "function" in source_command:
+                        function_sig = source_command.get("function", "")
+                        if "->" in function_sig:
+                            return_part = function_sig.split("->")[1].strip()
+                            if " " in return_part:
+                                param_name = return_part.split(" ")[1]
+
+                # Format with arrow indicating data flow from previous command
+                if function_name and param_name:
+                    return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {state_ref} <- {cmd_ref} output"
+                else:
+                    return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {state_ref} <- {cmd_ref} output"
             elif numeric_val < len(state):
                 # It's an initial state value
                 state_value = state[numeric_val]
-                
+
                 # Skip empty values (which may be placeholders or explicitly 0x)
                 if state_value != "0x" and state_value != "" and state_value is not None:
                     value_formatted = format_value(state_value)
@@ -268,18 +295,18 @@ def format_input_line(
                         value_formatted = colorize(value_formatted, "value_number")
                     elif isinstance(state_value, bool):
                         value_formatted = colorize(value_formatted, "value_bool")
-                    
-                    return f"{prefix} {input_label}{state_ref} = {value_formatted}"
-                    
+
+                    return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {state_ref} = {value_formatted}"
+
                 # Fall through for empty values
-                return f"{prefix} {input_label}{state_ref}"
+                return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {state_ref}"
             else:
                 # Reference to a state that will be computed during execution
-                return f"{prefix} {input_label}{state_ref}"
+                return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {state_ref}"
 
     # Handle non-integer inputs (should be rare in the planner, more common in decoded plans)
     value_text = colorize(format_value(input_val), "value_string")
-    return f"{prefix} {input_label} {value_text}"
+    return f"{TREE_CHARS['contract_indent']}{prefix} {input_label}   {value_text}"
 
 
 def format_output_line(
@@ -346,7 +373,9 @@ def format_output_line(
                                 param_full = param  # Keep the full param with type
                                 if " " in param:
                                     # Extract the parameter name from "address receiver" -> "receiver"
-                                    param_name = param.split(" ")[1] if len(param.split(" ")) > 1 else param.split(" ")[0]
+                                    param_name = (
+                                        param.split(" ")[1] if len(param.split(" ")) > 1 else param.split(" ")[0]
+                                    )
                     elif "(" in function_sig and ")" in function_sig:
                         # Fallback to original function signature if function_info not available
                         params_section = function_sig.split("(")[1].split(")")[0]
@@ -384,16 +413,13 @@ def format_output_line(
             output_type_name = output_type
     else:
         output_type_name = output_type if output_type else ""
-            
+
     # Format output label with type similar to input parameters
     if output_type_name:
-        output_label_text = f"{output_type_name} output:"
+        output_label = colorize(f"{output_type_name} output:", "output_label")
     else:
-        output_label_text = "Output:"
-        
-    # Pad to 18 spaces to match the input labels
-    output_label = colorize(output_label_text.ljust(18), "output_label")
-    
+        output_label = colorize("Output:", "output_label")
+
     # Colorize state reference with state-based coloring
     state_ref = colorize_state_ref(f"State[{numeric_output_val}]", numeric_output_val)
 
@@ -401,40 +427,43 @@ def format_output_line(
     if usage_details:
         if len(usage_details) == 1:
             cmd_idx, fn_name, param_name, param_full = usage_details[0]
-            
+
             if fn_name and param_name:
-                cmd_ref = colorize(f"Command {cmd_idx}", "function_name")
-                # Use full parameter with type
-                param_ref = colorize(f"{fn_name} {param_full}", "param_name")
-                arrow = colorize("→", "tree_structure")
-                return f"{prefix} {output_label}{state_ref} {arrow} {cmd_ref} ({param_ref})"
+                cmd_ref = colorize(f"Command[{cmd_idx}]", "function_name")
+                # Use parameter name for clarity
+                param_ref = colorize(f"{param_name}", "param_name")
+                arrow = colorize("->", "tree_structure")
+                return f"{TREE_CHARS['contract_indent']}{prefix} {output_label}   {state_ref} {arrow} {cmd_ref} {fn_name}.{param_name}"
             else:
-                cmd_ref = colorize(f"Command {cmd_idx}", "function_name")
-                arrow = colorize("→", "tree_structure")
-                return f"{prefix} {output_label}{state_ref} {arrow} {cmd_ref}"
+                cmd_ref = colorize(f"Command[{cmd_idx}]", "function_name")
+                arrow = colorize("->", "tree_structure")
+                return f"{TREE_CHARS['contract_indent']}{prefix} {output_label}   {state_ref} {arrow} {cmd_ref}"
         else:
             # Multiple usages
             usage_strs = []
             for cmd_idx, fn_name, param_name, param_full in usage_details:
                 if fn_name and param_name:
-                    cmd_ref = colorize(f"Command {cmd_idx}", "function_name")
-                    # Use full parameter with type
-                    param_ref = colorize(f"{fn_name} {param_full}", "param_name")
-                    usage_strs.append(f"{cmd_ref} ({param_ref})")
+                    cmd_ref = colorize(f"Command[{cmd_idx}]", "function_name")
+                    usage_strs.append(f"{cmd_ref} {fn_name}.{param_name}")
                 else:
-                    cmd_ref = colorize(f"Command {cmd_idx}", "function_name")
+                    cmd_ref = colorize(f"Command[{cmd_idx}]", "function_name")
                     usage_strs.append(f"{cmd_ref}")
-                    
-            arrow = colorize("→", "tree_structure")
-            return f"{prefix} {output_label}{state_ref} {arrow} " + ", ".join(usage_strs)
+
+            arrow = colorize("->", "tree_structure")
+            return f"{TREE_CHARS['contract_indent']}{prefix} {output_label}   {state_ref} {arrow} " + ", ".join(
+                usage_strs
+            )
     else:
         unused_msg = colorize("(unused in future commands)", "unused")
-        return f"{prefix} {output_label}{state_ref} {unused_msg}"
+        return f"{TREE_CHARS['contract_indent']}{prefix} {output_label}   {state_ref} {unused_msg}"
 
 
 def render_tree(
-    commands: List[Dict[str, Any]], state: List[Any], call_types: List[str], contracts: Optional[Dict[str, Any]] = None,
-    use_color: Optional[bool] = None
+    commands: List[Dict[str, Any]],
+    state: List[Any],
+    call_types: List[str],
+    contracts: Optional[Dict[str, Any]] = None,
+    use_color: Optional[bool] = None,
 ) -> str:
     """
     Renders a plan execution tree.
@@ -471,7 +500,7 @@ def render_tree(
             is_last_input = j == len(inputs) - 1
             has_output = bool(outputs)
             input_lines.append(
-                format_input_line(input_val, j, is_last_input, has_output, command, state_sources, state)
+                format_input_line(input_val, j, is_last_input, has_output, command, state_sources, state, commands)
             )
 
         # Add input lines
