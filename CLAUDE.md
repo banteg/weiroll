@@ -2,6 +2,12 @@
 
 ## Python SDK
 
+if you get an error "ape.exceptions.ProviderNotConnectedError: Not connected to a network provider.", it means you need to connect like this:
+
+from ape import networks
+with networks.parse_network_choice('ethereum:mainnet:http://127.0.0.1:8545'):
+    # your code
+
 ### Overview
 The Python SDK provides bindings to interact with the Weiroll VM. It allows creating plans, wrapping contracts, and generating command sequences to execute on-chain.
 

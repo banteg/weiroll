@@ -67,31 +67,7 @@ COLORS = {
     "RESET": "\033[0m",
 }
 
-# We'll define this function here but implement it after the supports_truecolor function is defined
-def hex_to_ansi_color(hex_color: str) -> str:
-    """Function prototype, implemented below after supports_truecolor is defined."""
-    pass  # Placeholder, actual implementation below
-
-# Generate ANSI color codes from Glasbey high-visibility colormap
-def generate_glasbey_colors() -> List[str]:
-    """Generate ANSI true color codes from Glasbey high-visibility colormap.
-    
-    Uses the Glasbey high-visibility color map optimized for both light and dark backgrounds.
-    """
-    colors = []
-    
-    # Only use colorcet if it's available
-    if HAS_COLORCET:
-        # cc.b_glasbey_hv is the high-visibility Glasbey palette optimized for both light/dark backgrounds
-        for i, hex_color in enumerate(cc.b_glasbey_hv):
-            # Skip the first few colors which might be too light
-            if i > 3:  # Start from the 4th color
-                # Add this color to our list
-                colors.append(hex_to_ansi_color(hex_color))
-    
-    return colors
-
-# Fallback colors in case Glasbey isn't available
+# Define Fallback colors here
 FALLBACK_STATE_COLORS = [
     COLORS["BRIGHT_RED"],
     COLORS["BRIGHT_GREEN"],
@@ -106,13 +82,6 @@ FALLBACK_STATE_COLORS = [
     COLORS["MAGENTA"],
     COLORS["CYAN"],
 ]
-
-# State slot colors using Glasbey high-visibility color map
-STATE_SLOT_COLORS = generate_glasbey_colors()
-
-# Ensure we have at least some colors
-if not STATE_SLOT_COLORS:
-    STATE_SLOT_COLORS = FALLBACK_STATE_COLORS
 
 # Tree colors mapping by element type
 TREE_COLORS = {
@@ -139,6 +108,8 @@ TREE_COLORS = {
     "value_bytes": COLORS["MAGENTA"],
 }
 
+# ===== Core Terminal Color Detection =====
+
 def supports_color() -> bool:
     """
     Check if the current terminal supports colors.
@@ -158,6 +129,10 @@ def supports_color() -> bool:
     
     # Check if FORCE_COLOR is set
     if "FORCE_COLOR" in os.environ:
+        return True
+    
+    # Force color support for Weiroll testing/debugging
+    if "WEIROLL_FORCE_TRUECOLOR" in os.environ:
         return True
     
     # Check if output is a terminal
@@ -191,6 +166,45 @@ def supports_truecolor() -> bool:
     # Check for specific terminals
     term_program = os.environ.get("TERM_PROGRAM", "").lower()
     return term_program in ["iterm", "apple_terminal", "vscode", "hyper"]
+
+# ===== Color Generation Functions =====
+
+# Generate ANSI color codes from Glasbey high-visibility colormap
+def generate_glasbey_colors() -> List[str]:
+    """Generate ANSI true color codes from Glasbey high-visibility colormap.
+    
+    Uses the Glasbey high-visibility color map optimized for both light and dark backgrounds.
+    """
+    colors = []
+    
+    # Only use colorcet if it's available
+    if HAS_COLORCET:
+        # cc.glasbey_hv contains RGB triplets as floats 0-1
+        for i, rgb_color in enumerate(cc.glasbey_hv):
+            # Skip the first few colors which might be too light
+            if i > 3:  # Start from the 4th color
+                # RGB values are provided as floats 0-1
+                r, g, b = rgb_color
+                # Convert to integers 0-255
+                r_int, g_int, b_int = int(r * 255), int(g * 255), int(b * 255)
+                # Generate ANSI color code
+                if supports_truecolor():
+                    colors.append(f"\033[38;2;{r_int};{g_int};{b_int}m")
+                else:
+                    # Fall back to 256-color ANSI escape sequence
+                    ansi = 16 + (36 * (r_int // 43)) + (6 * (g_int // 43)) + (b_int // 43)
+                    colors.append(f"\033[38;5;{ansi}m")
+    
+    return colors
+
+# State slot colors using Glasbey high-visibility color map
+STATE_SLOT_COLORS = generate_glasbey_colors()
+
+# Ensure we have at least some colors
+if not STATE_SLOT_COLORS:
+    STATE_SLOT_COLORS = FALLBACK_STATE_COLORS
+
+# ===== Color Application Functions =====
 
 def colorize(text: str, color_key: str, use_color: Optional[bool] = None) -> str:
     """
@@ -254,36 +268,6 @@ def get_color_mode() -> bool:
         bool: True if colors should be used, False otherwise
     """
     return supports_color()
-
-
-# Now implement the actual hex_to_ansi_color function
-def hex_to_ansi_color(hex_color: str) -> str:
-    """Convert a hex color string to the appropriate ANSI color escape sequence.
-    
-    Uses true color (24-bit) when supported, falls back to 256-color mode otherwise.
-    
-    Args:
-        hex_color: Hex color string starting with # (e.g., "#d60000")
-        
-    Returns:
-        ANSI color escape sequence
-    """
-    # Strip # if present
-    if hex_color.startswith("#"):
-        hex_color = hex_color[1:]
-    
-    # Convert hex to RGB (0-255)
-    r = int(hex_color[0:2], 16)
-    g = int(hex_color[2:4], 16)
-    b = int(hex_color[4:6], 16)
-    
-    # Use true color (24-bit) when supported
-    if supports_truecolor():
-        return f"\033[38;2;{r};{g};{b}m"
-    else:
-        # Fall back to 256-color ANSI escape sequence
-        ansi = 16 + (36 * (r // 43)) + (6 * (g // 43)) + (b // 43)
-        return f"\033[38;5;{ansi}m"
 
 def get_state_slot_color(slot_index: int) -> str:
     """
