@@ -5,20 +5,20 @@ import ape
 from weiroll import CallType, Contract, Decoder, Planner
 
 expected_vault_plan_output = textwrap.dedent("""
-Command 0: DAI Token @ 0x6B175474E89094C44Da98b954EedeAC495271d0F [CALL]
+Command[0]: DAI Token @ 0x6B175474E89094C44Da98b954EedeAC495271d0F [CALL]
     balanceOf(address holder) -> uint256
     ├─ address holder:   State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
-    └─ uint256 output:   State[1] -> Command 1 as deposit.assets
+    └─ uint256 output:   State[1] -> Command[1] as deposit.assets
 
-Command 1: DAI Vault @ 0xd8063123BBA3B480569244AE66BFE72B6c84b00d [CALL]
+Command[1]: DAI Vault @ 0xd8063123BBA3B480569244AE66BFE72B6c84b00d [CALL]
     deposit(uint256 assets, address receiver) -> uint256
-    ├─ uint256 assets:   State[1] <- from Command 0 output
+    ├─ uint256 assets:   State[1] <- from Command[0] output
     ├─ address receiver: State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
-    └─ uint256 output:   State[2] -> Command 2 as redeem.shares
+    └─ uint256 output:   State[2] -> Command[2] as redeem.shares
 
-Command 2: DAI Vault @ 0xd8063123BBA3B480569244AE66BFE72B6c84b00d [CALL]
+Command[2]: DAI Vault @ 0xd8063123BBA3B480569244AE66BFE72B6c84b00d [CALL]
     redeem(uint256 shares, address receiver, address owner) -> uint256
-    ├─ uint256 shares:   State[2] <- from Command 1 output
+    ├─ uint256 shares:   State[2] <- from Command[1] output
     ├─ address receiver: State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
     ├─ address owner:    State[0] = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
     └─ uint256 output:   State[3] (unused in future commands)
