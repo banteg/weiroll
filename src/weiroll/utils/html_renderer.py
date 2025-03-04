@@ -6,6 +6,7 @@ Provides functions to render a plan as HTML for display in environments like Jup
 
 from typing import Any, Dict, List, Optional
 import colorcet as cc
+from jinja2 import Template
 
 
 def render_html(
@@ -34,187 +35,28 @@ def render_html(
     # Use colorcet's glasbey color palette for better visual distinction
     # cc.b_glasbey_hv is already a list of hex color strings
     state_colors = cc.b_glasbey_hv
-
-    # Build HTML representation with CSS that works on both light and dark backgrounds
-    html = [
-        "<style>",
-        ":root {",
-        "  --weiroll-bg: rgba(0, 0, 0, 0.03);",
-        "  --weiroll-text: #333333;",
-        "  --weiroll-command-header: #1967D2;",
-        "  --weiroll-function-name: #0F9D58;",
-        "  --weiroll-command-call: #0F9D58;",
-        "  --weiroll-command-staticcall: #007B83;",
-        "  --weiroll-command-delegatecall: #C65B00;",
-        "  --weiroll-tree-branch: #777777;",
-        "  --weiroll-address: #9D5700;",
-        "  --weiroll-input-label: #555555;",
-        "  --weiroll-output-label: #9D5700;",
-        "  --weiroll-value-string: #0F9D58;",
-        "  --weiroll-value-number: #9D5700;",
-        "  --weiroll-value-bool: #007B83;",
-        "  --weiroll-value-address: #9D5700;",
-        "  --weiroll-value-bytes: #9C27B0;",
-        "  --weiroll-unused: #777777;",
-        "  --weiroll-subplan: #C62828;",
-        "  --weiroll-param-name: #007B83;",
-        "  --weiroll-arrow: #777777;",
-        "  --weiroll-highlight-bg: rgba(255, 255, 200, 0.3);",
-        "  --weiroll-row-highlight: rgba(200, 200, 255, 0.2);",
-        "}",
-        "",
-        "@media (prefers-color-scheme: dark) {",
-        "  :root {",
-        "    --weiroll-bg: rgba(255, 255, 255, 0.05);",
-        "    --weiroll-text: #E8EAED;",
-        "    --weiroll-command-header: #4285F4;",
-        "    --weiroll-function-name: #0F9D58;",
-        "    --weiroll-command-call: #34A853;",
-        "    --weiroll-command-staticcall: #00ACC1;",
-        "    --weiroll-command-delegatecall: #FBBC05;",
-        "    --weiroll-tree-branch: #9AA0A6;",
-        "    --weiroll-address: #F4B400;",
-        "    --weiroll-input-label: #E8EAED;",
-        "    --weiroll-output-label: #F4B400;",
-        "    --weiroll-value-string: #34A853;",
-        "    --weiroll-value-number: #F4B400;",
-        "    --weiroll-value-bool: #00ACC1;",
-        "    --weiroll-value-address: #F4B400;",
-        "    --weiroll-value-bytes: #9C27B0;",
-        "    --weiroll-unused: #9AA0A6;",
-        "    --weiroll-subplan: #DB4437;",
-        "    --weiroll-param-name: #00ACC1;",
-        "    --weiroll-arrow: #9AA0A6;",
-        "    --weiroll-highlight-bg: rgba(255, 255, 100, 0.2);",
-        "    --weiroll-row-highlight: rgba(150, 150, 255, 0.15);",
-        "  }",
-        "}",
-        "",
-        ".weiroll-plan { font-family: monospace; white-space: pre; line-height: 1.2; color: var(--weiroll-text); background: var(--weiroll-bg); padding: 10px; border-radius: 4px; }",
-        ".weiroll-plan div { margin: 0; padding: 0; }",
-        ".weiroll-plan .command-header { font-weight: bold; color: var(--weiroll-command-header); margin-top: 10px; }",
-        ".weiroll-plan .command-call { color: var(--weiroll-command-call); }",
-        ".weiroll-plan .command-staticcall { color: var(--weiroll-command-staticcall); }",
-        ".weiroll-plan .command-delegatecall { color: var(--weiroll-command-delegatecall); }",
-        ".weiroll-plan .command-type { font-style: italic; }",
-        ".weiroll-plan .tree-branch { color: var(--weiroll-tree-branch); }",
-        ".weiroll-plan .function-name { color: var(--weiroll-function-name); }",
-        ".weiroll-plan .address { color: var(--weiroll-address); }",
-        ".weiroll-plan .input-label { color: var(--weiroll-input-label); font-weight: 600; }",
-        ".weiroll-plan .output-label { color: var(--weiroll-output-label); }",
-        ".weiroll-plan .value-string { color: var(--weiroll-value-string); }",
-        ".weiroll-plan .value-number { color: var(--weiroll-value-number); }",
-        ".weiroll-plan .value-bool { color: var(--weiroll-value-bool); }",
-        ".weiroll-plan .value-address { color: var(--weiroll-value-address); }",
-        ".weiroll-plan .value-bytes { color: var(--weiroll-value-bytes); }",
-        ".weiroll-plan .unused { color: var(--weiroll-unused); font-style: italic; }",
-        ".weiroll-plan .subplan { color: var(--weiroll-subplan); }",
-        ".weiroll-plan .param-name { color: var(--weiroll-param-name); }",
-        ".weiroll-plan .arrow { color: var(--weiroll-arrow); }",
-    ]
-
-    # Add state-specific styles with colors
-    for i, color in enumerate(state_colors):
-        html.append(f".weiroll-plan .state-{i} {{ color: {color}; font-weight: bold; }}")
-
-    # Add CSS variables for state colors
-    html.append(":root {")
-    for i, color in enumerate(state_colors):
-        html.append(f"  --state-{i}-color: {color};")
-    html.append("}")
-
-    # Add interactivity styles
-    html.extend(
-        [
-            # Hover interactivity styles
-            ".weiroll-plan div[data-state-used], .weiroll-plan div[data-state-source] { transition: background-color 0.15s ease; }",
-            ".weiroll-plan [data-state-ref] { transition: background-color 0.15s ease; cursor: pointer; }",
-            ".weiroll-plan .highlighted-state { background-color: var(--weiroll-highlight-bg) !important; text-decoration: underline; }",
-            ".weiroll-plan .highlighted-row { background-color: var(--weiroll-row-highlight) !important; }",
-            "</style>",
-            "<script>",
-            "function highlightState(stateId) {",
-            "  // Unhighlight any previously highlighted elements",
-            "  clearHighlight();",
-            "  ",
-            "  // Highlight all state references with this ID",
-            "  document.querySelectorAll(`[data-state-ref='${stateId}']`).forEach(el => {",
-            "    el.classList.add('highlighted-state');",
-            "  });",
-            "  ",
-            "  // Highlight all rows that use or produce this state",
-            "  document.querySelectorAll(`div[data-state-used='${stateId}']`).forEach(el => {",
-            "    el.classList.add('highlighted-row');",
-            "  });",
-            "  document.querySelectorAll(`div[data-state-source='${stateId}']`).forEach(el => {",
-            "    el.classList.add('highlighted-row');",
-            "  });",
-            "}",
-            "",
-            "function clearHighlight() {",
-            "  document.querySelectorAll('.highlighted-state').forEach(el => {",
-            "    el.classList.remove('highlighted-state');",
-            "  });",
-            "  document.querySelectorAll('.highlighted-row').forEach(el => {",
-            "    el.classList.remove('highlighted-row');",
-            "  });",
-            "}",
-            "</script>",
-            "<div class='weiroll-plan'>",
-        ]
-    )
-
-    # Format each command
+    
+    # Process command data for rendering
+    processed_commands = []
     for i, command in enumerate(commands):
         call_type = call_types[i] if i < len(call_types) else "CALL"
-
-        # Format command header
+        command_type = command.get("command_type", "CALL")
         target = command.get("to", "0x0000000000000000000000000000000000000000")
         function = command.get("function", f"function({command.get('selector', '0x00000000')})")
         contract_name = command.get("contract_name", "")
-
-        # Color class based on call type
-        call_type_class = f"command-{call_type.lower()}"
-
-        # Command header - combining contract, function, and call type in one block
-        header_line = f"<div class='command-header'>Command {i}: "
-
-        # Contract name and address
-        if contract_name:
-            header_line += f"<span class='function-name'>{contract_name}</span> @ <span class='address'>{target}</span>"
-        else:
-            header_line += f"<span class='address'>{target}</span>"
-
-        html.append(header_line + "</div>")
-
-        # Function signature and call type
-        function_line = f"<div class='{call_type_class}'>  <span class='function-name'>{function}</span> <span class='command-type'>["
-
-        # Handle command type
-        command_type = command.get("command_type", "CALL")
-        if command_type != "CALL":
-            function_line += f"{call_type}, {command_type}]"
-        else:
-            function_line += f"{call_type}]"
-
-        html.append(function_line + "</span></div>")
-
-        # Process inputs
         inputs = command.get("inputs", [])
         outputs = command.get("outputs", [])
-
-        # Format inputs
+        
+        # Process inputs
+        processed_inputs = []
         for j, input_val in enumerate(inputs):
             is_last_input = j == len(inputs) - 1
             has_output = bool(outputs)
-
-            # Determine branch character
             branch_char = "└─" if is_last_input and not has_output else "├─"
-
-            # Try to get parameter info
+            
+            # Process parameter info
             param_type = ""
             param_name = ""
-
             if "function" in command:
                 function_sig = command.get("function", "")
                 if "(" in function_sig and ")" in function_sig:
@@ -228,131 +70,115 @@ def render_html(
                             param_name = param_parts[1] if len(param_parts) > 1 else ""
                         else:
                             param_type = param
-
+            
             # Create input label
             if param_type and param_name:
-                input_label = f"{param_type} {param_name}:"
+                input_label = f"{param_type} {param_name}"
             elif param_type:
-                input_label = f"{param_type}:"
+                input_label = f"{param_type}"
             else:
-                input_label = f"Input {j}:"
-
+                input_label = f"Input {j}"
+                
             # Get the source command
             source_cmd = -1
             if "input_sources" in command and j < len(command["input_sources"]):
                 source_cmd = command["input_sources"][j]
-
+                
+            input_data = {
+                "index": j,
+                "value": input_val,
+                "is_last": is_last_input,
+                "has_output": has_output,
+                "branch_char": branch_char,
+                "param_type": param_type,
+                "param_name": param_name,
+                "input_label": input_label,
+                "source_cmd": source_cmd
+            }
+            
+            # Process state reference for numeric values
             if isinstance(input_val, int) or (isinstance(input_val, str) and input_val.isdigit()):
-                # Convert to int
                 try:
                     numeric_val = int(input_val)
-                except (ValueError, TypeError):
-                    numeric_val = input_val
-
-                # Special handling for negative indices
-                if isinstance(numeric_val, int) and numeric_val < 0:
-                    if "command_type" in command and command["command_type"] == "SUBPLAN":
-                        if numeric_val == -1:
-                            html.append(
-                                f"<div data-command-idx='{i}'>  <span class='tree-branch'>{branch_char}</span> <span class='input-label'>{input_label}</span> <span class='subplan'>&lt;Subplan&gt;</span></div>"
-                            )
-                        else:
-                            html.append(
-                                f"<div data-command-idx='{i}'>  <span class='tree-branch'>{branch_char}</span> <span class='input-label'>{input_label}</span> <span class='subplan'>&lt;Special Value: {numeric_val}&gt;</span></div>"
-                            )
-                    else:
-                        html.append(
-                            f"<div data-command-idx='{i}'>  <span class='tree-branch'>{branch_char}</span> <span class='input-label'>{input_label}</span> <span class='state-ref'>&lt;Special Value: {numeric_val}&gt;</span></div>"
-                        )
-
-                # Regular state reference
-                elif isinstance(numeric_val, int):
-                    # Use the state-specific color class and add data attribute for interactivity
-                    state_color_class = f"state-{numeric_val % 20}"
-                    state_ref = (
-                        f"<span class='{state_color_class}' data-state-ref='{numeric_val}' "
-                        + f"onmouseover='highlightState({numeric_val})' "
-                        + f"onmouseout='clearHighlight()'>State[{numeric_val}]</span>"
-                    )
-
-                    if source_cmd >= 0:
-                        # Show source command
-                        cmd_ref = f"<span class='function-name'>Command {source_cmd}</span>"
-                        html.append(
-                            f"<div data-command-idx='{i}' data-state-used='{numeric_val}'>  <span class='tree-branch'>{branch_char}</span> <span class='input-label'>{input_label}</span> {state_ref} (from {cmd_ref} output)</div>"
-                        )
-                    elif numeric_val < len(state):
-                        # It's an initial state value
-                        from ..utils.formatters import format_value
-
-                        value_formatted = format_value(state[numeric_val])
-
-                        # Format value based on type
-                        value_class = "value-string"
-                        if isinstance(state[numeric_val], str):
-                            if state[numeric_val].startswith("0x"):
-                                if len(state[numeric_val]) == 42:  # Ethereum address
-                                    value_class = "value-address"
+                    input_data["numeric_val"] = numeric_val
+                    
+                    # For state references
+                    if isinstance(numeric_val, int) and numeric_val >= 0:
+                        input_data["is_state_ref"] = True
+                        input_data["state_color_class"] = f"state-{numeric_val % 20}"
+                        
+                        if source_cmd >= 0:
+                            input_data["has_source"] = True
+                        elif numeric_val < len(state):
+                            input_data["is_initial_state"] = True
+                            # Get formatted value
+                            from ..utils.formatters import format_value
+                            input_data["value_formatted"] = format_value(state[numeric_val])
+                            
+                            # Determine value class
+                            if isinstance(state[numeric_val], str):
+                                if state[numeric_val].startswith("0x"):
+                                    if len(state[numeric_val]) == 42:  # Ethereum address
+                                        input_data["value_class"] = "value-address"
+                                    else:
+                                        input_data["value_class"] = "value-bytes"
                                 else:
-                                    value_class = "value-bytes"
+                                    input_data["value_class"] = "value-string"
+                            elif isinstance(state[numeric_val], (int, float)):
+                                input_data["value_class"] = "value-number"
+                            elif isinstance(state[numeric_val], bool):
+                                input_data["value_class"] = "value-bool"
                             else:
-                                value_class = "value-string"
-                        elif isinstance(state[numeric_val], (int, float)):
-                            value_class = "value-number"
-                        elif isinstance(state[numeric_val], bool):
-                            value_class = "value-bool"
-
-                        html.append(
-                            f"<div data-command-idx='{i}' data-state-used='{numeric_val}'>  <span class='tree-branch'>{branch_char}</span> <span class='input-label'>{input_label}</span> {state_ref} = <span class='{value_class}'>{value_formatted}</span></div>"
-                        )
-                    else:
-                        # Reference to a state that will be computed
-                        html.append(
-                            f"<div data-command-idx='{i}' data-state-used='{numeric_val}'>  <span class='tree-branch'>{branch_char}</span> <span class='input-label'>{input_label}</span> {state_ref}</div>"
-                        )
+                                input_data["value_class"] = "value-string"
+                    # For negative indices (special values)
+                    elif isinstance(numeric_val, int) and numeric_val < 0:
+                        input_data["is_special_value"] = True
+                        if "command_type" in command and command["command_type"] == "SUBPLAN":
+                            input_data["is_subplan"] = True
+                except (ValueError, TypeError):
+                    # Non-numeric state reference
+                    pass
             else:
-                # Handle non-integer inputs
+                # Non-integer input
                 from ..utils.formatters import format_value
-
-                value_text = format_value(input_val)
-                html.append(
-                    f"<div data-command-idx='{i}'>  <span class='tree-branch'>{branch_char}</span> <span class='input-label'>{input_label}</span> <span class='value-string'>{value_text}</span></div>"
-                )
-
-        # Format outputs
+                input_data["value_text"] = format_value(input_val)
+                
+            processed_inputs.append(input_data)
+            
+        # Process outputs
+        processed_outputs = []
         if outputs:
             for output_val in outputs:
                 # Create a numeric value for the output
-                numeric_output_val = output_val
                 try:
-                    numeric_output_val = int(numeric_output_val)
+                    numeric_output_val = int(output_val)
                 except (ValueError, TypeError):
                     numeric_output_val = output_val
-
+                
                 # Extract output type if available
                 output_type = ""
-                if "function" in commands[i]:
-                    function_sig = commands[i].get("function", "")
+                if "function" in command:
+                    function_sig = command.get("function", "")
                     if "->" in function_sig:
                         return_part = function_sig.split("->")[1].strip()
                         if "," in return_part:
                             return_part = return_part.split(",")[0].strip()
                         output_type = return_part
-
+                
                 # Format output label
                 if output_type:
-                    output_label = f"{output_type} output:"
+                    output_label = f"{output_type} output"
                 else:
-                    output_label = "Output:"
-
-                # Use the state-specific color class and add data attribute for interactivity
-                color_idx = numeric_output_val % 20 if isinstance(numeric_output_val, int) else 0
-                state_ref = (
-                    f"<span class='state-{color_idx}' data-state-ref='{numeric_output_val}' "
-                    + f"onmouseover='highlightState({numeric_output_val})' "
-                    + f"onmouseout='clearHighlight()'>State[{numeric_output_val}]</span>"
-                )
-
+                    output_label = "Output"
+                    
+                output_data = {
+                    "value": output_val,
+                    "numeric_val": numeric_output_val,
+                    "output_type": output_type,
+                    "output_label": output_label,
+                    "color_idx": numeric_output_val % 20 if isinstance(numeric_output_val, int) else 0,
+                }
+                
                 # Find if output is used by later commands
                 usage_details = []
                 if isinstance(numeric_output_val, int) and numeric_output_val in state_usage:
@@ -362,11 +188,11 @@ def render_html(
                             function_name = cmd.get("function", "")
                             if "(" in function_name:
                                 function_name = function_name.split("(")[0]
-
+                                
                             # Try to get parameter name
                             param_name = f"param{input_idx}"
                             param_full = f"param{input_idx}"
-
+                            
                             function_sig = cmd.get("function", "")
                             if "(" in function_sig and ")" in function_sig:
                                 params_section = function_sig.split("(")[1].split(")")[0]
@@ -378,52 +204,264 @@ def render_html(
                                         param_name = (
                                             param.split(" ")[1] if len(param.split(" ")) > 1 else param.split(" ")[0]
                                         )
+                                        
+                            usage_details.append({
+                                "cmd_idx": cmd_idx,
+                                "fn_name": function_name,
+                                "param_name": param_name,
+                                "param_full": param_full
+                            })
+                
+                output_data["usage_details"] = usage_details
+                processed_outputs.append(output_data)
+                
+        processed_commands.append({
+            "index": i,
+            "call_type": call_type,
+            "command_type": command_type,
+            "target": target,
+            "function": function,
+            "contract_name": contract_name,
+            "call_type_class": f"command-{call_type.lower()}",
+            "inputs": processed_inputs,
+            "outputs": processed_outputs
+        })
 
-                            usage_details.append((cmd_idx, function_name, param_name, param_full))
+    # Define the Jinja2 template
+    template_str = """
+<style>
+:root {
+  --weiroll-bg: rgba(0, 0, 0, 0.03);
+  --weiroll-text: #333333;
+  --weiroll-command-header: #1967D2;
+  --weiroll-function-name: #0F9D58;
+  --weiroll-command-call: #0F9D58;
+  --weiroll-command-staticcall: #007B83;
+  --weiroll-command-delegatecall: #C65B00;
+  --weiroll-tree-branch: #777777;
+  --weiroll-address: #9D5700;
+  --weiroll-input-label: #555555;
+  --weiroll-output-label: #9D5700;
+  --weiroll-value-string: #0F9D58;
+  --weiroll-value-number: #9D5700;
+  --weiroll-value-bool: #007B83;
+  --weiroll-value-address: #9D5700;
+  --weiroll-value-bytes: #9C27B0;
+  --weiroll-unused: #777777;
+  --weiroll-subplan: #C62828;
+  --weiroll-param-name: #007B83;
+  --weiroll-arrow: #777777;
+  --weiroll-highlight-bg: rgba(255, 255, 200, 0.3);
+  --weiroll-row-highlight: rgba(200, 200, 255, 0.2);
+  --weiroll-arg-highlight: rgba(255, 200, 255, 0.3);
+}
 
-                # Format the output line with usage information
-                if usage_details:
-                    if len(usage_details) == 1:
-                        cmd_idx, fn_name, param_name, param_full = usage_details[0]
+@media (prefers-color-scheme: dark) {
+  :root {
+    --weiroll-bg: rgba(255, 255, 255, 0.05);
+    --weiroll-text: #E8EAED;
+    --weiroll-command-header: #4285F4;
+    --weiroll-function-name: #0F9D58;
+    --weiroll-command-call: #34A853;
+    --weiroll-command-staticcall: #00ACC1;
+    --weiroll-command-delegatecall: #FBBC05;
+    --weiroll-tree-branch: #9AA0A6;
+    --weiroll-address: #F4B400;
+    --weiroll-input-label: #E8EAED;
+    --weiroll-output-label: #F4B400;
+    --weiroll-value-string: #34A853;
+    --weiroll-value-number: #F4B400;
+    --weiroll-value-bool: #00ACC1;
+    --weiroll-value-address: #F4B400;
+    --weiroll-value-bytes: #9C27B0;
+    --weiroll-unused: #9AA0A6;
+    --weiroll-subplan: #DB4437;
+    --weiroll-param-name: #00ACC1;
+    --weiroll-arrow: #9AA0A6;
+    --weiroll-highlight-bg: rgba(255, 255, 100, 0.2);
+    --weiroll-row-highlight: rgba(150, 150, 255, 0.15);
+    --weiroll-arg-highlight: rgba(255, 200, 255, 0.2);
+  }
+}
 
-                        if fn_name and param_name:
-                            cmd_ref = f"<span class='function-name'>Command {cmd_idx}</span>"
-                            param_ref = f"<span class='param-name'>{fn_name} {param_full}</span>"
-                            html.append(
-                                f"<div data-command-idx='{i}' data-state-source='{numeric_output_val}'>  <span class='tree-branch'>└─</span> <span class='output-label'>{output_label}</span> {state_ref} <span class='arrow'>→</span> {cmd_ref} ({param_ref})</div>"
-                            )
-                        else:
-                            cmd_ref = f"<span class='function-name'>Command {cmd_idx}</span>"
-                            html.append(
-                                f"<div data-command-idx='{i}' data-state-source='{numeric_output_val}'>  <span class='tree-branch'>└─</span> <span class='output-label'>{output_label}</span> {state_ref} <span class='arrow'>→</span> {cmd_ref}</div>"
-                            )
-                    else:
-                        # Multiple usages
-                        usage_strs = []
-                        for cmd_idx, fn_name, param_name, param_full in usage_details:
-                            if fn_name and param_name:
-                                cmd_ref = f"<span class='function-name'>Command {cmd_idx}</span>"
-                                param_ref = f"<span class='param-name'>{fn_name} {param_full}</span>"
-                                usage_strs.append(f"{cmd_ref} ({param_ref})")
-                            else:
-                                cmd_ref = f"<span class='function-name'>Command {cmd_idx}</span>"
-                                usage_strs.append(f"{cmd_ref}")
+.weiroll-plan { font-family: monospace; white-space: pre; line-height: 1.2; color: var(--weiroll-text); background: var(--weiroll-bg); padding: 10px; border-radius: 4px; }
+.weiroll-plan div { margin: 0; padding: 0; }
+.weiroll-plan .command-header { font-weight: bold; color: var(--weiroll-command-header); margin-top: 10px; }
+.weiroll-plan .command-call { color: var(--weiroll-command-call); }
+.weiroll-plan .command-staticcall { color: var(--weiroll-command-staticcall); }
+.weiroll-plan .command-delegatecall { color: var(--weiroll-command-delegatecall); }
+.weiroll-plan .command-type { font-style: italic; }
+.weiroll-plan .tree-branch { color: var(--weiroll-tree-branch); }
+.weiroll-plan .function-name { color: var(--weiroll-function-name); }
+.weiroll-plan .address { color: var(--weiroll-address); }
+.weiroll-plan .input-label { color: var(--weiroll-input-label); }
+.weiroll-plan .output-label { color: var(--weiroll-output-label); }
+.weiroll-plan .value-string { color: var(--weiroll-value-string); }
+.weiroll-plan .value-number { color: var(--weiroll-value-number); }
+.weiroll-plan .value-bool { color: var(--weiroll-value-bool); }
+.weiroll-plan .value-address { color: var(--weiroll-value-address); }
+.weiroll-plan .value-bytes { color: var(--weiroll-value-bytes); }
+.weiroll-plan .unused { color: var(--weiroll-unused); font-style: italic; }
+.weiroll-plan .subplan { color: var(--weiroll-subplan); }
+.weiroll-plan .param-name { color: var(--weiroll-param-name); }
+.weiroll-plan .arrow { color: var(--weiroll-arrow); }
 
-                        html.append(
-                            f"<div data-command-idx='{i}' data-state-source='{numeric_output_val}'>  <span class='tree-branch'>└─</span> <span class='output-label'>{output_label}</span> {state_ref} <span class='arrow'>→</span> "
-                            + ", ".join(usage_strs)
-                            + "</div>"
-                        )
-                else:
-                    html.append(
-                        f"<div data-command-idx='{i}' data-state-source='{numeric_output_val}'>  <span class='tree-branch'>└─</span> <span class='output-label'>{output_label}</span> {state_ref} <span class='unused'>(unused in future commands)</span></div>"
-                    )
+{% for i, color in state_colors %}
+.weiroll-plan .state-{{ i }} { color: {{ color }}; font-weight: bold; }
+{% endfor %}
 
-        # Add spacing between commands
-        if i < len(commands) - 1:
-            html.append("<div style='height: 10px;'></div>")
+:root {
+{% for i, color in state_colors %}
+  --state-{{ i }}-color: {{ color }};
+{% endfor %}
+}
 
-    # Close container div
-    html.append("</div>")
+/* Interactivity styles */
+.weiroll-plan div[data-state-used], .weiroll-plan div[data-state-source] { transition: background-color 0.15s ease; }
+.weiroll-plan [data-state-ref] { transition: background-color 0.15s ease; cursor: pointer; }
+.weiroll-plan .highlighted-state { background-color: var(--weiroll-highlight-bg) !important; text-decoration: underline; }
+.weiroll-plan .highlighted-row { background-color: var(--weiroll-row-highlight) !important; }
+.weiroll-plan .highlighted-arg { background-color: var(--weiroll-arg-highlight) !important; }
+</style>
 
-    return "".join(html)
+<script>
+function highlightState(stateId) {
+  // Unhighlight any previously highlighted elements
+  clearHighlight();
+  
+  // Highlight all state references with this ID
+  document.querySelectorAll(`[data-state-ref='${stateId}']`).forEach(el => {
+    el.classList.add('highlighted-state');
+  });
+  
+  // Highlight all rows that use or produce this state
+  document.querySelectorAll(`div[data-state-used='${stateId}']`).forEach(el => {
+    el.classList.add('highlighted-row');
+  });
+  document.querySelectorAll(`div[data-state-source='${stateId}']`).forEach(el => {
+    el.classList.add('highlighted-row');
+  });
+  
+  // Highlight all arguments that use this state
+  document.querySelectorAll(`span[data-state-arg='${stateId}']`).forEach(el => {
+    el.classList.add('highlighted-arg');
+  });
+}
+
+function clearHighlight() {
+  document.querySelectorAll('.highlighted-state').forEach(el => {
+    el.classList.remove('highlighted-state');
+  });
+  document.querySelectorAll('.highlighted-row').forEach(el => {
+    el.classList.remove('highlighted-row');
+  });
+  document.querySelectorAll('.highlighted-arg').forEach(el => {
+    el.classList.remove('highlighted-arg');
+  });
+}
+</script>
+
+<div class='weiroll-plan'>
+{% for cmd in commands %}
+  <div class='command-header'>Command {{ cmd.index }}: 
+    {% if cmd.contract_name %}
+    <span class='function-name'>{{ cmd.contract_name }}</span> @ <span class='address'>{{ cmd.target }}</span>
+    {% else %}
+    <span class='address'>{{ cmd.target }}</span>
+    {% endif %}
+  </div>
+  
+  <div class='{{ cmd.call_type_class }}'>  <span class='function-name'>{{ cmd.function }}</span> <span class='command-type'>[
+    {% if cmd.command_type != "CALL" %}
+    {{ cmd.call_type }}, {{ cmd.command_type }}]
+    {% else %}
+    {{ cmd.call_type }}]
+    {% endif %}
+  </span></div>
+  
+  {# Process inputs #}
+  {% for input in cmd.inputs %}
+    <div data-command-idx='{{ cmd.index }}'{% if input.is_state_ref and input.numeric_val is defined %} data-state-used='{{ input.numeric_val }}'{% endif %}>
+      <span class='tree-branch'>{{ input.branch_char }}</span> 
+      <span class='input-label'>{{ input.input_label }}:</span> 
+      
+      {% if input.is_state_ref is defined and input.is_state_ref %}
+        {# State reference #}
+        <span class='{{ input.state_color_class }}' data-state-ref='{{ input.numeric_val }}' 
+              onmouseover='highlightState({{ input.numeric_val }})' 
+              onmouseout='clearHighlight()'>State[{{ input.numeric_val }}]</span>
+        
+        {% if input.has_source is defined and input.has_source %}
+          (from <span class='function-name'>Command {{ input.source_cmd }}</span> output)
+        {% elif input.is_initial_state is defined and input.is_initial_state %}
+          = <span class='{{ input.value_class }}'>{{ input.value_formatted }}</span>
+        {% endif %}
+        
+      {% elif input.is_special_value is defined and input.is_special_value %}
+        {# Special value (negative index) #}
+        {% if input.is_subplan is defined and input.is_subplan %}
+          {% if input.numeric_val == -1 %}
+          <span class='subplan'>&lt;Subplan&gt;</span>
+          {% else %}
+          <span class='subplan'>&lt;Special Value: {{ input.numeric_val }}&gt;</span>
+          {% endif %}
+        {% else %}
+          <span class='state-ref'>&lt;Special Value: {{ input.numeric_val }}&gt;</span>
+        {% endif %}
+        
+      {% else %}
+        {# Regular value #}
+        <span class='value-string'>{{ input.value_text if input.value_text is defined else input.value }}</span>
+      {% endif %}
+    </div>
+  {% endfor %}
+  
+  {# Process outputs #}
+  {% for output in cmd.outputs %}
+    <div data-command-idx='{{ cmd.index }}' data-state-source='{{ output.numeric_val }}'>
+      <span class='tree-branch'>└─</span> 
+      <span class='output-label'>{{ output.output_label }}:</span> 
+      
+      <span class='state-{{ output.color_idx }}' data-state-ref='{{ output.numeric_val }}' 
+            onmouseover='highlightState({{ output.numeric_val }})' 
+            onmouseout='clearHighlight()'>State[{{ output.numeric_val }}]</span>
+      
+      {% if output.usage_details %}
+        <span class='arrow'>→</span> 
+        {% if output.usage_details|length == 1 %}
+          {% set usage = output.usage_details[0] %}
+          <span class='function-name'>Command {{ usage.cmd_idx }}</span> 
+          {% if usage.fn_name and usage.param_name %}
+          (<span class='param-name' data-state-arg='{{ output.numeric_val }}'>{{ usage.fn_name }} {{ usage.param_full }}</span>)
+          {% endif %}
+        {% else %}
+          {% for usage in output.usage_details %}
+            {% if not loop.first %}, {% endif %}
+            <span class='function-name'>Command {{ usage.cmd_idx }}</span>
+            {% if usage.fn_name and usage.param_name %}
+            (<span class='param-name' data-state-arg='{{ output.numeric_val }}'>{{ usage.fn_name }} {{ usage.param_full }}</span>)
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+      {% else %}
+        <span class='unused'>(unused in future commands)</span>
+      {% endif %}
+    </div>
+  {% endfor %}
+  
+  {% if not loop.last %}
+  <div style='height: 10px;'></div>
+  {% endif %}
+{% endfor %}
+</div>
+"""
+
+    # Prepare data for the template
+    template_data = {
+        "commands": processed_commands,
+        "state_colors": [(i, color) for i, color in enumerate(state_colors)]
+    }
+    
+    # Render the template
+    template = Template(template_str)
+    return template.render(**template_data)
