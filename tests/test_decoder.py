@@ -74,7 +74,7 @@ def test_plan_decoding(math_contract):
     assert to_checksum_address(math_contract.address) == target_1
 
     # Check that we can stringify the plan for display
-    plan_str = decoded.show_tree()
+    plan_str = decoded.show_tree(use_color=False)
     assert "Command[0]:" in plan_str
     assert "Command[1]:" in plan_str
     assert "add(uint256, uint256)" in plan_str
@@ -127,7 +127,7 @@ def test_decoder_state_handling():
     assert decoded.state[2] == "0x"
 
     # Check tree rendering
-    tree_output = decoded.show_tree()
+    tree_output = decoded.show_tree(use_color=False)
     assert "Command[0]:" in tree_output
     assert "State[0]" in tree_output
     assert "State[1]" in tree_output
@@ -148,13 +148,13 @@ def test_show_tree_format(math_contract):
     plan = planner.plan()
 
     # Get the original tree format
-    planner.show_tree()
+    planner.show_tree(use_color=False)
 
     # Decode the plan
-    decoded = Decoder.decode_plan(plan["commands"], plan["state"])
+    decoded = Decoder.decode_plan(plan["commands"], plan["state"], use_color=False)
 
     # Get the decoded tree format
-    decoded_tree = decoded.show_tree()
+    decoded_tree = decoded.show_tree(use_color=False)
 
     # Both should show command structure and data dependencies
     assert "Command[0]:" in decoded_tree
@@ -237,7 +237,7 @@ def test_vault_plan_tree_and_decoder_match():
     plan = planner.plan()
 
     # Get the plan tree output
-    tree_output = planner.show_tree()
+    tree_output = planner.show_tree(use_color=False)
 
     # Compare with expected output
     # We're now using the new format, so we don't need to check against alternative_vault_plan_output
@@ -251,8 +251,8 @@ def test_vault_plan_tree_and_decoder_match():
     assert "0xba087652" in tree_output  # redeem selector
 
     # Decode the plan
-    decoded_plan = Decoder.decode_plan(plan["commands"], plan["state"])
-    decoded_output = decoded_plan.show_tree()  # Use show_tree explicitly instead of relying on __str__
+    decoded_plan = Decoder.decode_plan(plan["commands"], plan["state"], use_color=False)
+    decoded_output = decoded_plan.show_tree(use_color=False)  # Use show_tree explicitly instead of relying on __str__
 
     # Update our expectations based on the actual decoded output
     # The whole point of this refactoring is to change the decoder implementation,
@@ -279,7 +279,7 @@ def test_vault_plan_tree_and_decoder_match():
     assert len(plan["state"]) == len(reconstructed_plan["state"])
 
     # Check that the reconstructed planner generates a tree output with key elements
-    reconstructed_tree = reconstructed_planner.show_tree()
+    reconstructed_tree = reconstructed_planner.show_tree(use_color=False)
 
     # Verify presence of key elements
     assert "Command" in reconstructed_tree, "Missing Command prefix in reconstructed plan"
