@@ -57,12 +57,12 @@ class Decoder:
             "name": "function",
             "signature": f"function({selector_hex})",
             "selector": selector_hex,
-            "contract_name": ""  # Initialize with empty contract name
+            "contract_name": "",  # Initialize with empty contract name
         }
 
         # Try to get the signature from the contract's identifier_lookup
         if hasattr(contract, "identifier_lookup") and selector_hex in contract.identifier_lookup:
-            fn_info["name"] = contract.identifier_lookup[selector_hex].name 
+            fn_info["name"] = contract.identifier_lookup[selector_hex].name
             fn_info["signature"] = contract.identifier_lookup[selector_hex].signature
 
         # Try to get contract name
@@ -78,7 +78,7 @@ class Decoder:
                             fn_info["contract_name"] = contract.symbol()
                         except Exception:
                             pass
-            
+
             # If name/symbol failed, use contract_type.name if available
             if not fn_info["contract_name"] and hasattr(contract, "contract_type") and contract.contract_type.name:
                 fn_info["contract_name"] = contract.contract_type.name
@@ -146,17 +146,17 @@ class Decoder:
                 "name": "function",
                 "signature": f"function({selector_hex})",
                 "selector": selector_hex,
-                "contract_name": ""
+                "contract_name": "",
             }
 
         return cmd
 
     @staticmethod
     def decode_plan(
-        commands: list[Union[str, bytes]], 
-        state: list[str], 
+        commands: list[Union[str, bytes]],
+        state: list[str],
         lookup_function_info: bool = True,
-        use_color: Optional[bool] = None
+        use_color: Optional[bool] = None,
     ) -> Planner:
         """
         Decode a full Weiroll plan into an enhanced Planner object.
@@ -176,13 +176,18 @@ class Decoder:
         # First decode commands with basic information
         decoded_commands = [Decoder.decode_command(cmd) for cmd in commands]
 
-        # Clean up state values for display
+        # Clean up state values for display and wrap in LiteralValue objects
+        from .values import LiteralValue
+
         clean_state = []
         for value in state:
             if isinstance(value, bytes):
-                clean_state.append(to_hex(value))
+                val = to_hex(value)
             else:
-                clean_state.append(value)
+                val = value
+            # Wrap in LiteralValue for proper display in show_tree
+            is_dynamic = isinstance(val, (bytes, str, list, tuple))
+            clean_state.append(LiteralValue(val, is_dynamic))
 
         # Process command pairs for extended inputs
         i = 0
@@ -266,7 +271,7 @@ class Decoder:
         # Add a decoded_str method that passes the color parameter
         def decoded_str(self, use_color: Optional[bool] = None):
             return self.show_tree(use_color=use_color)
-            
+
         planner.decoded_str = MethodType(decoded_str, planner)
 
         # Save the original __str__ method
@@ -276,26 +281,27 @@ class Decoder:
         # Define a safer __str__ that delegates to show_tree with auto color detection or specified value
         def enhanced_str(self, use_color: Optional[bool] = None):
             # Use the color value passed to decode_plan if not explicitly overridden
-            color_val = use_color if use_color is not None else use_color 
+            color_val = use_color if use_color is not None else use_color
             return self.show_tree(use_color=color_val)
 
         planner.__str__ = MethodType(enhanced_str, planner)
-        
+
         # Ensure the _repr_html_ method is also available for notebook display
         if not hasattr(planner, "_repr_html_"):
+
             def repr_html(self):
                 """Generate HTML representation for decoded planners"""
                 # For decoded planners, we need to make sure each command has function_info
                 # and that contract_name is accessible
-                
+
                 # Check if we have any commands
                 if not self.commands:
                     return "<div class='weiroll-plan'><p><em>Empty plan (no commands)</em></p></div>"
-                
+
                 # Use the built-in _repr_html_ method from the Planner class
                 # This will ensure consistent rendering between regular and decoded planners
                 return self.__class__._repr_html_(self)
-                
+
             planner._repr_html_ = MethodType(repr_html, planner)
 
         return planner

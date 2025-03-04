@@ -384,7 +384,7 @@ def format_output_line(
                             param = params[input_idx].strip()
                             param_full = param  # Keep the full param with type
                             if " " in param:
-                                param_name = param.split(" ")[0]
+                                param_name = param.split(" ")[1] if len(param.split(" ")) > 1 else param.split(" ")[0]
 
                     usage_details.append((cmd_idx, function_name, param_name, param_full))
                 else:

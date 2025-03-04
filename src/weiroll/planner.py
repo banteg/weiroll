@@ -40,9 +40,7 @@ class Planner:
         self.state_value = ContractStateValue(-1, is_dynamic=True)
         self.state_value.to_arg = lambda: CommandArg(index=-1, is_dynamic=True, is_state=True)
 
-    def _add_to_state(
-        self, value: Any, deduplicate: bool = True
-    ) -> int:
+    def _add_to_state(self, value: Any, deduplicate: bool = True) -> int:
         """
         Add a value to the planner's state and return the state index.
 
@@ -73,10 +71,8 @@ class Planner:
         self.state.append(value)
         self.next_state_index += 1
         return index
-        
-    def _add_literal_to_state(
-        self, value: Any, is_dynamic: bool = False, deduplicate: bool = True
-    ) -> int:
+
+    def _add_literal_to_state(self, value: Any, is_dynamic: bool = False, deduplicate: bool = True) -> int:
         """
         Helper method to add a Python literal value to the state.
         Wraps it in a LiteralValue and calls _add_to_state.
@@ -137,11 +133,11 @@ class Planner:
             output_arg = CommandArg(index=idx)
             output_state = ContractStateValue(index=idx, is_dynamic=True)
             output_state.source_command = len(self.commands)
-            
+
             # Create a CommandOutputValue for tuple return
             cmd_output = CommandOutputValue(source_command=len(self.commands), is_dynamic=True)
             self._add_to_state(cmd_output, deduplicate=False)
-        
+
         elif fn_call.method_abi.outputs and len(fn_call.method_abi.outputs) > 0:
             # Normal function with a single output
             outtype = fn_call.method_abi.outputs[0].type
@@ -151,7 +147,7 @@ class Planner:
             output_arg = CommandArg(index=idx, is_dynamic=is_dyn)
             output_state = ContractStateValue(index=idx, is_dynamic=is_dyn)
             output_state.source_command = len(self.commands)
-            
+
             # Create a CommandOutputValue with the source command index
             cmd_output = CommandOutputValue(source_command=len(self.commands), is_dynamic=is_dyn)
             self._add_to_state(cmd_output, deduplicate=False)
@@ -218,9 +214,9 @@ class Planner:
                 # Always disable deduplication for function arguments to ensure proper dependency tracking
                 is_dyn = isinstance(arg, (bytes, str, list, tuple))
                 idx = self._add_literal_to_state(
-                    value=arg, 
-                    is_dynamic=is_dyn, 
-                    deduplicate=False  # Disable deduplication for function arguments
+                    value=arg,
+                    is_dynamic=is_dyn,
+                    deduplicate=False,  # Disable deduplication for function arguments
                 )
                 input_args.append(CommandArg(index=idx, is_dynamic=is_dyn))
 
@@ -280,9 +276,9 @@ class Planner:
                 is_dyn = isinstance(arg, (bytes, str, list, tuple))
                 # Always disable deduplication for function arguments
                 idx = self._add_literal_to_state(
-                    value=arg, 
-                    is_dynamic=is_dyn, 
-                    deduplicate=False  # Disable deduplication for function arguments
+                    value=arg,
+                    is_dynamic=is_dyn,
+                    deduplicate=False,  # Disable deduplication for function arguments
                 )
                 input_args.append(CommandArg(index=idx, is_dynamic=is_dyn))
 
@@ -339,7 +335,7 @@ class Planner:
                 # Create a SubplanValue with the encoded bytes
                 subplan_value = SubplanValue(bytes.fromhex(encoded_subplan[2:]))
                 subplan_index = self._add_to_state(subplan_value, deduplicate=False)
-                
+
                 # Patch the argument that is_subplan=True
                 for arg in cmd.inputs:
                     if arg.is_subplan:
@@ -366,7 +362,7 @@ class Planner:
 
         return {"commands": encoded_commands, "state": encoded_state}
 
-    # The _encode_single_value method is removed since each PlannerValue subclass 
+    # The _encode_single_value method is removed since each PlannerValue subclass
     # now has its own to_bytes() method for encoding
 
     def __enter__(self) -> "Planner":
@@ -378,11 +374,28 @@ class Planner:
     def __repr__(self) -> str:
         return f"Planner(commands={len(self.commands)}, state_size={len(self.state)})"
 
-    def show_tree(self, use_color: Optional[bool] = None) -> str:
+    def show_tree(self, use_color: Optional[bool] = None, decoded: bool = False) -> str:
         """
         Generate a visual ASCII-based tree representation of the plan, showing how
         command inputs and outputs depend on each other or on literal state.
+
+        Args:
+            use_color: Whether to use colors in the output (None for auto-detection)
+            decoded: Whether to decode the plan before showing the tree (adds function names and contract names)
+
+        Returns:
+            str: Formatted string representation of the execution tree
         """
+        if decoded:
+            # Import here to avoid circular imports
+            from .decoder import Decoder
+
+            # Generate the plan
+            plan = self.plan()
+            # Decode the plan
+            decoded_plan = Decoder.decode_plan(plan["commands"], plan["state"])
+            # Show the tree
+            return decoded_plan.show_tree(use_color=use_color)
         if not self.commands:
             return "Empty plan (no commands)"
 
