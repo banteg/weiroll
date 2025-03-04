@@ -1,8 +1,27 @@
 """
 Terminal color utilities for weiroll output formatting.
 
-This module provides ANSI color codes and utility functions for 
-terminal color detection and colored text formatting.
+This module provides both standard ANSI color codes and true color (24-bit)
+support for modern terminals. It detects terminal capabilities and automatically
+selects the appropriate color mode.
+
+Features:
+- True color (24-bit RGB) support for terminals that support it
+- Automatic fallback to 256-color mode for older terminals
+- Glasbey high-visibility color palette for maximum perceptual distinctness
+- Color detection to disable colors when not supported
+- Environment variable overrides for color preferences
+
+Environment variables:
+- WEIROLL_FORCE_COLOR: Force color output even if terminal doesn't support it
+- WEIROLL_NO_COLOR: Disable color output
+- WEIROLL_FORCE_TRUECOLOR: Force true color (24-bit) mode
+- NO_COLOR: Standard variable to disable color output across applications
+- FORCE_COLOR: Standard variable to force color output
+- COLORTERM=truecolor: Indicates terminal supports true color
+
+The module automatically selects the best color mode based on the terminal
+capabilities and environment variables.
 """
 import os
 import sys
@@ -47,32 +66,14 @@ COLORS = {
     "RESET": "\033[0m",
 }
 
-# Convert hex color string to ANSI escape sequence
-def hex_to_ansi_256(hex_color: str) -> str:
-    """Convert a hex color string to ANSI 256-color escape sequence.
-    
-    Args:
-        hex_color: Hex color string starting with # (e.g., "#d60000")
-        
-    Returns:
-        ANSI 256-color escape sequence
-    """
-    # Strip # if present
-    if hex_color.startswith("#"):
-        hex_color = hex_color[1:]
-    
-    # Convert hex to RGB (0-255)
-    r = int(hex_color[0:2], 16)
-    g = int(hex_color[2:4], 16)
-    b = int(hex_color[4:6], 16)
-    
-    # Convert RGB values (0-255) to ANSI 256-color code (16-231)
-    ansi = 16 + (36 * (r // 43)) + (6 * (g // 43)) + (b // 43)
-    return f"\033[38;5;{ansi}m"
+# We'll define this function here but implement it after the supports_truecolor function is defined
+def hex_to_ansi_color(hex_color: str) -> str:
+    """Function prototype, implemented below after supports_truecolor is defined."""
+    pass  # Placeholder, actual implementation below
 
 # Generate ANSI color codes from Glasbey high-visibility colormap
 def generate_glasbey_colors() -> List[str]:
-    """Generate ANSI color codes from Glasbey high-visibility colormap."""
+    """Generate ANSI true color codes from Glasbey high-visibility colormap."""
     colors = []
     
     # Only use colorcet if it's available
@@ -82,7 +83,7 @@ def generate_glasbey_colors() -> List[str]:
             # Skip the first few colors which might be too light
             if i > 3:  # Start from the 4th color
                 # Add this color to our list
-                colors.append(hex_to_ansi_256(hex_color))
+                colors.append(hex_to_ansi_color(hex_color))
     
     return colors
 
@@ -158,6 +159,35 @@ def supports_color() -> bool:
     # Check if output is a terminal
     return hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
 
+def supports_truecolor() -> bool:
+    """
+    Check if the current terminal supports true color (24-bit color).
+    
+    Returns:
+        bool: True if the terminal supports true color, False otherwise
+    """
+    # Force truecolor via env var
+    if "WEIROLL_FORCE_TRUECOLOR" in os.environ:
+        return True
+    
+    # Check if we support any colors first
+    if not supports_color():
+        return False
+    
+    # Check COLORTERM for explicit truecolor support
+    colorterm = os.environ.get("COLORTERM", "").lower()
+    if "truecolor" in colorterm or "24bit" in colorterm:
+        return True
+    
+    # Check if running in a terminal that likely supports truecolor
+    term = os.environ.get("TERM", "").lower()
+    if "xterm" in term or "256color" in term:
+        return True
+    
+    # Check for specific terminals
+    term_program = os.environ.get("TERM_PROGRAM", "").lower()
+    return term_program in ["iterm", "apple_terminal", "vscode", "hyper"]
+
 def colorize(text: str, color_key: str, use_color: Optional[bool] = None) -> str:
     """
     Apply color to the given text if colors are supported.
@@ -213,6 +243,36 @@ def get_color_mode() -> bool:
         bool: True if colors should be used, False otherwise
     """
     return supports_color()
+
+
+# Now implement the actual hex_to_ansi_color function
+def hex_to_ansi_color(hex_color: str) -> str:
+    """Convert a hex color string to the appropriate ANSI color escape sequence.
+    
+    Uses true color (24-bit) when supported, falls back to 256-color mode otherwise.
+    
+    Args:
+        hex_color: Hex color string starting with # (e.g., "#d60000")
+        
+    Returns:
+        ANSI color escape sequence
+    """
+    # Strip # if present
+    if hex_color.startswith("#"):
+        hex_color = hex_color[1:]
+    
+    # Convert hex to RGB (0-255)
+    r = int(hex_color[0:2], 16)
+    g = int(hex_color[2:4], 16)
+    b = int(hex_color[4:6], 16)
+    
+    # Use true color (24-bit) when supported
+    if supports_truecolor():
+        return f"\033[38;2;{r};{g};{b}m"
+    else:
+        # Fall back to 256-color ANSI escape sequence
+        ansi = 16 + (36 * (r // 43)) + (6 * (g // 43)) + (b // 43)
+        return f"\033[38;5;{ansi}m"
 
 def get_state_slot_color(slot_index: int) -> str:
     """
