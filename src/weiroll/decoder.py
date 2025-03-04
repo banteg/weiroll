@@ -42,53 +42,50 @@ class Decoder:
     """
 
     @staticmethod
-    def lookup_function_info(contract: ApeContract, selector_hex: str) -> Dict[str, str]:
+    def lookup_function_info(contract: ApeContract, selector_hex: str) -> Dict[str, Any]:
         """
-        Look up function information using a consistent approach.
-
-        Attempts to determine function name and signature using:
-        1. Contract's identifier_lookup
-        2. Contract's decode_input
-        3. Falls back to a generic placeholder
+        Look up function information from a contract ABI.
 
         Args:
             contract: The contract object
             selector_hex: The function selector as a hex string
 
         Returns:
-            A dictionary with function name, signature, and selector
+            dict: Function information including name, signature, selector, and contract_name
         """
-        function_name = "function"
-        function_signature = f"function({selector_hex})"
+        fn_info = {
+            "name": "function",
+            "signature": f"function({selector_hex})",
+            "selector": selector_hex,
+            "contract_name": ""  # Initialize with empty contract name
+        }
 
+        # Try to get the signature from the contract's identifier_lookup
+        if hasattr(contract, "identifier_lookup") and selector_hex in contract.identifier_lookup:
+            fn_info["name"] = contract.identifier_lookup[selector_hex].name 
+            fn_info["signature"] = contract.identifier_lookup[selector_hex].signature
+
+        # Try to get contract name
         try:
-            logger.debug(f"Processing selector: {selector_hex}")
-
-            # 1. Try to get from identifier_lookup (most reliable)
-            if hasattr(contract, "identifier_lookup") and selector_hex in contract.identifier_lookup:
-                identifier = contract.identifier_lookup[selector_hex]
-                function_signature = identifier.signature
-                function_name = identifier.name
-                logger.debug(f"Matched function via identifier_lookup: {function_signature}")
-            else:
-                # 2. Try with decode_input
+            # Try to get contract name from name() function
+            if hasattr(contract, "name") and callable(getattr(contract, "name")):
                 try:
-                    selector_bytes = bytes.fromhex(selector_hex[2:] if selector_hex.startswith("0x") else selector_hex)
-                    # Add placeholders for multiple parameters
-                    min_calldata = selector_bytes + b"\x00" * 128
+                    fn_info["contract_name"] = contract.name()
+                except Exception:
+                    # Try symbol as fallback
+                    if hasattr(contract, "symbol") and callable(getattr(contract, "symbol")):
+                        try:
+                            fn_info["contract_name"] = contract.symbol()
+                        except Exception:
+                            pass
+            
+            # If name/symbol failed, use contract_type.name if available
+            if not fn_info["contract_name"] and hasattr(contract, "contract_type") and contract.contract_type.name:
+                fn_info["contract_name"] = contract.contract_type.name
+        except Exception:
+            pass
 
-                    # Try to get the function signature
-                    decoded_input = contract.decode_input(min_calldata)
-                    if decoded_input and len(decoded_input) > 0:
-                        function_signature = decoded_input[0]
-                        function_name = function_signature.split("(")[0]
-                        logger.debug(f"Matched function via decode_input: {function_signature}")
-                except Exception as e:
-                    logger.debug(f"Error in decode_input: {e}")
-        except Exception as e:
-            logger.debug(f"Error looking up function info: {e}")
-
-        return {"name": function_name, "signature": function_signature, "selector": selector_hex}
+        return fn_info
 
     @staticmethod
     def decode_extended_inputs(command_data: Union[str, bytes]) -> list[int]:
@@ -149,6 +146,7 @@ class Decoder:
                 "name": "function",
                 "signature": f"function({selector_hex})",
                 "selector": selector_hex,
+                "contract_name": ""
             }
 
         return cmd
@@ -286,6 +284,14 @@ class Decoder:
         # Ensure the _repr_html_ method is also available for notebook display
         if not hasattr(planner, "_repr_html_"):
             def repr_html(self):
+                """Generate HTML representation for decoded planners"""
+                # For decoded planners, we need to make sure each command has function_info
+                # and that contract_name is accessible
+                
+                # Check if we have any commands
+                if not self.commands:
+                    return "<div class='weiroll-plan'><p><em>Empty plan (no commands)</em></p></div>"
+                
                 # Use the built-in _repr_html_ method from the Planner class
                 # This will ensure consistent rendering between regular and decoded planners
                 return self.__class__._repr_html_(self)
