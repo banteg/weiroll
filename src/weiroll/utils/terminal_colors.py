@@ -230,10 +230,17 @@ def colorize_state_ref(text: str, slot_index: int, use_color: Optional[bool] = N
     if not should_use_color:
         return text
     
-    # Get the color for this state slot and make it bold
-    color_code = get_state_slot_color(slot_index) + COLORS["BOLD"]
-    
-    return f"{color_code}{text}{COLORS['RESET']}"
+    try:
+        # Get the color for this state slot and make it bold
+        color_code = get_state_slot_color(slot_index)
+        if color_code:
+            return f"{color_code}{COLORS['BOLD']}{text}{COLORS['RESET']}"
+        else:
+            # Fallback to default bold
+            return f"{COLORS['BOLD']}{text}{COLORS['RESET']}"
+    except Exception:
+        # If any error occurs, return uncolored text
+        return text
 
 def get_color_mode() -> bool:
     """
@@ -293,7 +300,16 @@ def get_state_slot_color(slot_index: int) -> str:
     # Ensure index is positive
     abs_index = abs(slot_index)
     
+    # Safety check for empty color list
+    if not STATE_SLOT_COLORS:
+        return COLORS["WHITE"]
+    
     # Return a color from our Glasbey palette based on slot index
     # Use modulo to handle any number of state slots
     color_index = abs_index % len(STATE_SLOT_COLORS)
+    
+    # Safety check for index out of range (shouldn't happen with modulo but just in case)
+    if color_index >= len(STATE_SLOT_COLORS) or not STATE_SLOT_COLORS[color_index]:
+        return COLORS["WHITE"]
+        
     return STATE_SLOT_COLORS[color_index]
