@@ -10,7 +10,7 @@ from .constants import ArgType, CallType, CommandType
 from .contract import FunctionCall, StateValue as ContractStateValue
 from .contract import SubplanValue as ContractSubplanValue
 from .utils.tree_renderer import render_tree
-from .utils.html_renderer import render_html
+from .utils.rich_renderer import render_rich_html
 from .values import PlannerValue, LiteralValue, CommandOutputValue, SubplanValue
 
 logger = logging.getLogger(__name__)
@@ -451,49 +451,101 @@ class Planner:
     def _repr_html_(self) -> str:
         """
         Return an HTML rendering (for Jupyter/IPython notebooks) of the planned calls.
+        Uses rich library to generate beautiful HTML output.
+
+        If the planner has been decoded, it will show the decoded version with enhanced information.
         """
-        if not self.commands:
-            return "<div class='weiroll-plan'><p><em>Empty plan (no commands)</em></p></div>"
+        # Check if this is a decoded planner
+        is_decoded = hasattr(self, "_is_decoded") and self._is_decoded
 
-        commands_for_renderer = []
-        call_types = []
-        for idx, cmd in enumerate(self.commands):
-            target_address = "0x" + cmd.target.hex()[-40:]
-            selector_hex = "0x" + cmd.function_selector.hex()
+        # If it's a decoded planner, use the decoded tree
+        if is_decoded:
+            # Use the show_tree method to get the tree with decoded information
+            # Then convert it to HTML
+            commands_for_renderer = []
+            call_types = []
 
-            contract_name = ""
-            fn_name = f"function({selector_hex})"
-            if hasattr(cmd, "function_info") and cmd.function_info:
-                fn_name = cmd.function_info.get("signature") or fn_name
-                contract_name = cmd.function_info.get("contract_name", "")
+            for idx, cmd in enumerate(self.commands):
+                target_address = "0x" + cmd.target.hex()[-40:]
+                selector_hex = "0x" + cmd.function_selector.hex()
 
-            command_dict = {
-                "to": target_address,
-                "function": fn_name,
-                "selector": selector_hex,
-                "inputs": [arg.index for arg in cmd.inputs],
-                "outputs": [],
-                "command_type": cmd.command_type.name,
-                "contract_name": contract_name,
-                "input_sources": [],  # Track sources for each input
-            }
+                contract_name = ""
+                fn_name = f"function({selector_hex})"
+                if hasattr(cmd, "function_info") and cmd.function_info:
+                    fn_name = cmd.function_info.get("signature") or fn_name
+                    contract_name = cmd.function_info.get("contract_name", "")
 
-            # For each input, if it's a state index from a command output, add the source
-            for arg in cmd.inputs:
-                if arg.index >= 0 and arg.index < len(self.state):
-                    state_val = self.state[arg.index]
-                    if isinstance(state_val, CommandOutputValue):
-                        command_dict["input_sources"].append(state_val.source_command)
-                    else:
-                        command_dict["input_sources"].append(-1)
+                command_dict = {
+                    "to": target_address,
+                    "function": fn_name,
+                    "selector": selector_hex,
+                    "inputs": [arg.index for arg in cmd.inputs],
+                    "outputs": [],
+                    "command_type": cmd.command_type.name,
+                    "contract_name": contract_name,
+                    "input_sources": [],  # Track sources for each input
+                }
 
-            if cmd.output and cmd.output.index != ArgType.USE_STATE:
-                command_dict["outputs"].append(cmd.output.index)
+                # For each input, if it's a state index from a command output, add the source
+                for arg in cmd.inputs:
+                    if arg.index >= 0 and arg.index < len(self.state):
+                        state_val = self.state[arg.index]
+                        if isinstance(state_val, CommandOutputValue):
+                            command_dict["input_sources"].append(state_val.source_command)
+                        else:
+                            command_dict["input_sources"].append(-1)
 
-            commands_for_renderer.append(command_dict)
+                if cmd.output and cmd.output.index != ArgType.USE_STATE:
+                    command_dict["outputs"].append(cmd.output.index)
 
-            ctype = cmd.call_type.name if hasattr(cmd.call_type, "name") else CallType(cmd.call_type).name
-            call_types.append(ctype)
+                commands_for_renderer.append(command_dict)
+
+                ctype = cmd.call_type.name if hasattr(cmd.call_type, "name") else CallType(cmd.call_type).name
+                call_types.append(ctype)
+        else:
+            # For regular planners, use the standard approach
+            if not self.commands:
+                return "<div class='weiroll-plan'><p><em>Empty plan (no commands)</em></p></div>"
+
+            commands_for_renderer = []
+            call_types = []
+            for idx, cmd in enumerate(self.commands):
+                target_address = "0x" + cmd.target.hex()[-40:]
+                selector_hex = "0x" + cmd.function_selector.hex()
+
+                contract_name = ""
+                fn_name = f"function({selector_hex})"
+                if hasattr(cmd, "function_info") and cmd.function_info:
+                    fn_name = cmd.function_info.get("signature") or fn_name
+                    contract_name = cmd.function_info.get("contract_name", "")
+
+                command_dict = {
+                    "to": target_address,
+                    "function": fn_name,
+                    "selector": selector_hex,
+                    "inputs": [arg.index for arg in cmd.inputs],
+                    "outputs": [],
+                    "command_type": cmd.command_type.name,
+                    "contract_name": contract_name,
+                    "input_sources": [],  # Track sources for each input
+                }
+
+                # For each input, if it's a state index from a command output, add the source
+                for arg in cmd.inputs:
+                    if arg.index >= 0 and arg.index < len(self.state):
+                        state_val = self.state[arg.index]
+                        if isinstance(state_val, CommandOutputValue):
+                            command_dict["input_sources"].append(state_val.source_command)
+                        else:
+                            command_dict["input_sources"].append(-1)
+
+                if cmd.output and cmd.output.index != ArgType.USE_STATE:
+                    command_dict["outputs"].append(cmd.output.index)
+
+                commands_for_renderer.append(command_dict)
+
+                ctype = cmd.call_type.name if hasattr(cmd.call_type, "name") else CallType(cmd.call_type).name
+                call_types.append(ctype)
 
         # Build simple state mapping
         state_sources = {}
@@ -524,4 +576,4 @@ class Planner:
                 # For non-literal values, pass None as a placeholder
                 state_for_renderer.append(None)
 
-        return render_html(commands_for_renderer, state_for_renderer, call_types, state_sources, state_usage)
+        return render_rich_html(commands_for_renderer, state_for_renderer, call_types, state_sources, state_usage)
