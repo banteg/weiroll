@@ -41,10 +41,13 @@ class Planner:
         self.state_value.to_arg = lambda: CommandArg(index=-1, is_dynamic=True, is_state=True)
 
     def _add_to_state(
-        self, value: PlannerValue, deduplicate: bool = True
+        self, value: Any, deduplicate: bool = True
     ) -> int:
         """
-        Add a PlannerValue to the planner's state and return the state index.
+        Add a value to the planner's state and return the state index.
+
+        This method can handle both PlannerValue instances and raw Python values.
+        Raw values will be automatically wrapped in a LiteralValue.
 
         We only deduplicate if:
           1) deduplicate == True
@@ -53,6 +56,11 @@ class Planner:
 
         Otherwise, we always add a new entry to the end of `self.state`.
         """
+        # If value is not a PlannerValue instance, wrap it in a LiteralValue
+        if not isinstance(value, PlannerValue):
+            is_dynamic = isinstance(value, (bytes, str, list, tuple))
+            value = LiteralValue(value, is_dynamic)
+
         # If deduplicate is enabled and this is a literal, try to find a match
         if deduplicate and value.is_literal():
             for i, existing_value in enumerate(self.state):
@@ -293,13 +301,17 @@ class Planner:
         Builds the subplan as hex-encoded bytes32[] to embed in the parent plan.
         Detects planner self-reference or cycles by using the 'seen' set.
         """
-        if planner in seen:
-            raise ValueError("A planner cannot contain itself")
+        # Check for identity equality, not value equality
+        for seen_planner in seen:
+            if planner is seen_planner:
+                raise ValueError("A planner cannot contain itself or create circular references")
 
-        new_seen = set(seen)
+        # Add this planner to the seen set before recursively building the subplan
+        new_seen = seen.copy()  # Create a copy to avoid modifying the original
         new_seen.add(planner)
 
-        subplan_data = planner.plan()
+        # Build the subplan
+        subplan_data = planner.plan(seen=new_seen)
         subcommands = subplan_data["commands"]  # Already hex strings like "0xabcd..."
 
         # Encode as bytes32[] with eth_abi
@@ -311,7 +323,7 @@ class Planner:
         except Exception as e:
             raise ValueError(f"Failed to encode subplan: {e}")
 
-    def plan(self) -> dict[str, list[str]]:
+    def plan(self, seen: Set["Planner"] = None) -> dict[str, list[str]]:
         """
         Finalize this planner into a dict with "commands" and "state" suitable for Weiroll VM execution.
         """
@@ -323,7 +335,7 @@ class Planner:
                 if not hasattr(cmd, "subplan") or cmd.subplan is None:
                     raise ValueError("Subplan command missing subplan reference")
 
-                encoded_subplan = self._build_subplan(cmd.subplan, set())
+                encoded_subplan = self._build_subplan(cmd.subplan, seen or set())
                 # Create a SubplanValue with the encoded bytes
                 subplan_value = SubplanValue(bytes.fromhex(encoded_subplan[2:]))
                 subplan_index = self._add_to_state(subplan_value, deduplicate=False)

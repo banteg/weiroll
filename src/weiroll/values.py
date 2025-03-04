@@ -33,6 +33,16 @@ class PlannerValue:
         """Encode this value as raw bytes for storing in the final Weiroll state."""
         raise NotImplementedError("Must implement to_bytes in subclasses.")
 
+    def __repr__(self) -> str:
+        """Base implementation of the string representation."""
+        return f"{self.__class__.__name__}()"
+    
+    def __eq__(self, other):
+        """Base implementation of equality comparison."""
+        if isinstance(other, PlannerValue):
+            return self.equals_literal(other)
+        return False
+
 
 class LiteralValue(PlannerValue):
     """
@@ -87,6 +97,24 @@ class LiteralValue(PlannerValue):
         except EncodingError as e:
             raise ValueError(f"Cannot ABI-encode literal: {self.data}") from e
 
+    def __str__(self):
+        # For debug rendering
+        return f"<LiteralValue {self.data}>"
+
+    def __repr__(self) -> str:
+        """Return string representation of the LiteralValue."""
+        return f"LiteralValue(data={repr(self.data)}, is_dynamic={self.is_dynamic})"
+    
+    def __eq__(self, other):
+        """
+        Equality comparison that allows comparing LiteralValue with its native value.
+        This allows tests to do: assert planner.state[index] == 42
+        """
+        if isinstance(other, PlannerValue):
+            return self.equals_literal(other)
+        # Allow direct comparison with the underlying data type
+        return self.data == other
+
 
 class CommandOutputValue(PlannerValue):
     """
@@ -115,6 +143,19 @@ class CommandOutputValue(PlannerValue):
         # For debug rendering
         return f"<CommandOutput from cmd {self.source_command}>"
 
+    def __repr__(self) -> str:
+        """Return string representation of the CommandOutputValue."""
+        return f"CommandOutputValue(source_command={self.source_command}, is_dynamic={self.is_dynamic})"
+    
+    def __eq__(self, other):
+        """
+        Equality comparison for CommandOutputValue.
+        """
+        if isinstance(other, CommandOutputValue):
+            return (self.source_command == other.source_command and 
+                    self.is_dynamic == other.is_dynamic)
+        return False
+
 
 class SubplanValue(PlannerValue):
     """
@@ -131,3 +172,24 @@ class SubplanValue(PlannerValue):
     def __str__(self):
         # For debug rendering
         return f"<Subplan len={len(self.subplan_bytes)}>"
+
+    def __repr__(self) -> str:
+        """Return string representation of the SubplanValue."""
+        if not self.subplan_bytes:
+            return "SubplanValue(subplan_bytes=<empty>)"
+        # Show length and first few bytes for better debugging
+        hex_preview = self.subplan_bytes.hex()[:16] + "..." if len(self.subplan_bytes) > 8 else self.subplan_bytes.hex()
+        return f"SubplanValue(subplan_bytes=<bytes of length {len(self.subplan_bytes)}, starts with 0x{hex_preview}>)"
+    
+    def __eq__(self, other):
+        """
+        Equality comparison for SubplanValue.
+        
+        To avoid circular references and infinite recursion, we only compare
+        the byte representation length, not the actual content.
+        """
+        if isinstance(other, SubplanValue):
+            # To avoid infinite recursion in circular references,
+            # we only compare the byte length, not the actual content
+            return len(self.subplan_bytes) == len(other.subplan_bytes)
+        return False

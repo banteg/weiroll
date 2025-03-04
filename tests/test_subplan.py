@@ -174,17 +174,21 @@ def test_validation_errors():
         planner.addSubplan(dummy_fn)
 
 
-def test_circular_reference():
+def test_circular_reference(simple_contract, executor_contract):
     """Test that circular references in subplans are detected"""
     # Create planners
-    planner1 = Planner()
-
-    # Create self-reference which is a simple case of circular reference
-    planner1.addSubplan(DummyFunctionCall(args=[SubplanValue(planner1), planner1.state_value]))
-
+    planner = Planner()
+    
+    # Create contract wrappers
+    contract = Contract(simple_contract)
+    executor = Contract(executor_contract, call_type=1)  # CALL
+    
+    # Create a subplan using planner as a reference to itself
+    planner.addSubplan(executor.execute(SubplanValue(planner), planner.state_value))
+    
     # Verify circular reference is detected
-    with pytest.raises(ValueError, match="A planner cannot contain itself"):
-        planner1.plan()
+    with pytest.raises(ValueError, match="A planner cannot contain itself or create circular references"):
+        planner.plan()
 
 
 def test_tree_view(simple_contract, executor_contract):
