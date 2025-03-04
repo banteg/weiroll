@@ -147,8 +147,8 @@ def colorize_state_ref(text: str, slot_index: int, use_color: Optional[bool] = N
     if not should_use_color:
         return text
     
-    # Get the color for this state slot
-    color_code = get_state_slot_color(slot_index)
+    # Get the color for this state slot and make it bold
+    color_code = get_state_slot_color(slot_index) + COLORS["BOLD"]
     
     return f"{color_code}{text}{COLORS['RESET']}"
 

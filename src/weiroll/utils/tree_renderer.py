@@ -163,8 +163,8 @@ def format_input_line(
     # Colorize the tree structure
     prefix = colorize(prefix_char, "tree_structure")
 
-    # Colorize the input label
-    input_label = colorize(f"Input {input_index}", "input_label")
+    # Colorize the input label with proper alignment (padding to 10 spaces)
+    input_label = colorize(f"Input {input_index}:".ljust(10), "input_label")
 
     # Get the source command from enhanced tracking, if available
     source_cmd = -1
@@ -187,7 +187,7 @@ def format_input_line(
         # but we need to find which command's output is being used (usually the preceding one)
         # We'll add a special indicator for clarity
         param_text = colorize(f"uint256 (value from returned balance)", "value_number")
-        return f"{prefix} {input_label}: {param_text}"
+        return f"{prefix} {input_label} {param_text}"
 
     if isinstance(input_val, int) or (isinstance(input_val, str) and input_val.isdigit()):
         # Convert to int for consistency
@@ -201,13 +201,13 @@ def format_input_line(
             if "command_type" in command and command["command_type"] == "SUBPLAN":
                 if numeric_val == -1:  # SUBPLAN_PLACEHOLDER
                     subplan_text = colorize("<Subplan>", "subplan")
-                    return f"{prefix} {input_label}: {subplan_text}"
+                    return f"{prefix} {input_label} {subplan_text}"
                 else:
                     special_text = colorize(f"<Special Value: {numeric_val}>", "subplan")
-                    return f"{prefix} {input_label}: {special_text}"
+                    return f"{prefix} {input_label} {special_text}"
             else:
                 special_text = colorize(f"<Special Value: {numeric_val}>", "state_ref")
-                return f"{prefix} {input_label}: {special_text}"
+                return f"{prefix} {input_label} {special_text}"
 
         # Regular state reference
         elif isinstance(numeric_val, int):
@@ -217,7 +217,7 @@ def format_input_line(
             if source_cmd >= 0:
                 # Show both source command and parameter role if available
                 cmd_ref = colorize(f"Command {source_cmd}", "function_name")
-                return f"{prefix} {input_label}: {state_ref} (from {cmd_ref} output)"
+                return f"{prefix} {input_label} {state_ref} (from {cmd_ref} output)"
             elif numeric_val < len(state):
                 # It's an initial state value
                 value_formatted = format_value(state[numeric_val])
@@ -235,14 +235,14 @@ def format_input_line(
                 elif isinstance(state[numeric_val], bool):
                     value_formatted = colorize(value_formatted, "value_bool")
                 
-                return f"{prefix} {input_label}: {state_ref} = {value_formatted}"
+                return f"{prefix} {input_label} {state_ref} = {value_formatted}"
             else:
                 # Reference to a state that will be computed during execution
-                return f"{prefix} {input_label}: {state_ref}"
+                return f"{prefix} {input_label} {state_ref}"
 
     # Handle non-integer inputs (should be rare in the planner, more common in decoded plans)
     value_text = colorize(format_value(input_val), "value_string")
-    return f"{prefix} {input_label}: {value_text}"
+    return f"{prefix} {input_label} {value_text}"
 
 
 def format_output_line(
@@ -331,11 +331,12 @@ def format_output_line(
     prefix_char = TREE_CHARS["last"]
     prefix = colorize(prefix_char, "tree_structure")
 
-    # Colorize the output label
-    output_label_text = "Output"
+    # Colorize the output label with proper alignment
+    output_label_text = "Output:"
     if output_type:
-        output_label_text = f"Output ({output_type})"
-    output_label = colorize(output_label_text, "output_label")
+        output_label_text = f"Output ({output_type}):"
+    # Pad to 10 spaces for consistent alignment
+    output_label = colorize(output_label_text.ljust(10), "output_label")
     
     # Colorize state reference with state-based coloring
     state_ref = colorize_state_ref(f"State[{numeric_output_val}]", numeric_output_val)
@@ -350,11 +351,11 @@ def format_output_line(
                 # Use full parameter with type
                 param_ref = colorize(f"{fn_name} {param_full}", "param_name")
                 arrow = colorize("→", "tree_structure")
-                return f"{prefix} {output_label}: {state_ref} {arrow} {cmd_ref} ({param_ref})"
+                return f"{prefix} {output_label} {state_ref} {arrow} {cmd_ref} ({param_ref})"
             else:
                 cmd_ref = colorize(f"Command {cmd_idx}", "function_name")
                 arrow = colorize("→", "tree_structure")
-                return f"{prefix} {output_label}: {state_ref} {arrow} {cmd_ref}"
+                return f"{prefix} {output_label} {state_ref} {arrow} {cmd_ref}"
         else:
             # Multiple usages
             usage_strs = []
@@ -369,10 +370,10 @@ def format_output_line(
                     usage_strs.append(f"{cmd_ref}")
                     
             arrow = colorize("→", "tree_structure")
-            return f"{prefix} {output_label}: {state_ref} {arrow} " + ", ".join(usage_strs)
+            return f"{prefix} {output_label} {state_ref} {arrow} " + ", ".join(usage_strs)
     else:
         unused_msg = colorize("(unused in future commands)", "unused")
-        return f"{prefix} {output_label}: {state_ref} {unused_msg}"
+        return f"{prefix} {output_label} {state_ref} {unused_msg}"
 
 
 def render_tree(
