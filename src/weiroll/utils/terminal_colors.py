@@ -8,7 +8,8 @@ selects the appropriate color mode.
 Features:
 - True color (24-bit RGB) support for terminals that support it
 - Automatic fallback to 256-color mode for older terminals
-- Glasbey high-visibility color palette for maximum perceptual distinctness
+- Glasbey high-visibility color palette optimized for both light and dark backgrounds
+- Maximum perceptual distinctness between adjacent colors
 - Color detection to disable colors when not supported
 - Environment variable overrides for color preferences
 
@@ -73,13 +74,16 @@ def hex_to_ansi_color(hex_color: str) -> str:
 
 # Generate ANSI color codes from Glasbey high-visibility colormap
 def generate_glasbey_colors() -> List[str]:
-    """Generate ANSI true color codes from Glasbey high-visibility colormap."""
+    """Generate ANSI true color codes from Glasbey high-visibility colormap.
+    
+    Uses the Glasbey high-visibility color map optimized for both light and dark backgrounds.
+    """
     colors = []
     
     # Only use colorcet if it's available
     if HAS_COLORCET:
-        # cc.b_glasbey_bw is the bokeh-style Glasbey palette with hex colors
-        for i, hex_color in enumerate(cc.b_glasbey_bw):
+        # cc.b_glasbey_hv is the high-visibility Glasbey palette optimized for both light/dark backgrounds
+        for i, hex_color in enumerate(cc.b_glasbey_hv):
             # Skip the first few colors which might be too light
             if i > 3:  # Start from the 4th color
                 # Add this color to our list
