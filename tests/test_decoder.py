@@ -1,8 +1,12 @@
+import os
 import textwrap
 
 import ape
 
 from weiroll import CallType, Contract, Decoder, Planner
+
+# Force no color output for tests to ensure consistent output regardless of terminal
+os.environ["WEIROLL_NO_COLOR"] = "1"
 
 expected_vault_plan_output = textwrap.dedent("""
 Command[0]: DAI Token @ 0x6B175474E89094C44Da98b954EedeAC495271d0F [CALL]
