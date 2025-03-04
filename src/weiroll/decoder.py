@@ -262,7 +262,7 @@ class Decoder:
         # In the future, we should use the private attribute instead
         planner._is_decoded = True
 
-        # Add a method to get tree representation without overriding __str__
+        # Add methods for improved display using MethodType
         from types import MethodType
 
         # Add a decoded_str method that passes the color parameter
@@ -282,6 +282,15 @@ class Decoder:
             return self.show_tree(use_color=color_val)
 
         planner.__str__ = MethodType(enhanced_str, planner)
+        
+        # Ensure the _repr_html_ method is also available for notebook display
+        if not hasattr(planner, "_repr_html_"):
+            def repr_html(self):
+                # Use the built-in _repr_html_ method from the Planner class
+                # This will ensure consistent rendering between regular and decoded planners
+                return self.__class__._repr_html_(self)
+                
+            planner._repr_html_ = MethodType(repr_html, planner)
 
         return planner
 

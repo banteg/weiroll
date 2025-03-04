@@ -9,6 +9,7 @@ from .command import Command, CommandArg
 from .constants import ArgType, CallType, CommandType
 from .contract import FunctionCall, StateValue, SubplanValue
 from .utils.tree_renderer import render_tree
+from .utils.html_renderer import render_html
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -138,10 +139,10 @@ class Planner:
             output_type = "bytes"
             # Create state value with source tracking information
             output = StateValue(
-                index=self.next_state_index, 
+                index=self.next_state_index,
                 is_dynamic=True,  # bytes is dynamic
                 # Will set source_command to current command index after we add the command
-                output_of=True
+                output_of=True,
             )
             output_arg = CommandArg(self.next_state_index)
             self.next_state_index += 1
@@ -151,10 +152,10 @@ class Planner:
             output_type = fn_call.method_abi.outputs[0].type
             # Create state value with source tracking information
             output = StateValue(
-                index=self.next_state_index, 
+                index=self.next_state_index,
                 is_dynamic=isinstance(output_type, (bytes, str)) or output_type in ["bytes", "string"],
                 # Will set source_command to current command index after we add the command
-                output_of=True
+                output_of=True,
             )
             output_arg = CommandArg(self.next_state_index)
             self.next_state_index += 1
@@ -173,11 +174,11 @@ class Planner:
         # Add command to the list
         command_idx = len(self.commands)
         self.commands.append(command)
-        
+
         # Set source command reference for tracking dependencies if there's an output
-        if output and hasattr(output, 'source_command'):
+        if output and hasattr(output, "source_command"):
             output.source_command = command_idx
-            
+
         return output  # This might be None
 
     def addSubplan(self, fn_call: FunctionCall) -> StateValue:
@@ -508,10 +509,10 @@ class Planner:
         # Convert commands to the format expected by the renderer
         commands_for_renderer = []
         call_types = []
-        
+
         # Track state value sources for better visualization
         source_tracking = {}
-        
+
         # First pass - collect StateValue objects with source_command information
         for i, value in enumerate(self.state):
             if isinstance(value, StateValue) and hasattr(value, "source_command") and value.source_command >= 0:
@@ -536,10 +537,10 @@ class Planner:
                     # Try to get the signature from the contract's identifier_lookup
                     if hasattr(contract, "identifier_lookup") and selector_hex in contract.identifier_lookup:
                         fn_name = contract.identifier_lookup[selector_hex].signature
-                    
+
                     # Try to get the contract name - prioritize name() function first
                     name_found = False
-                    
+
                     # Try to get the name from name() function first
                     if hasattr(contract, "name") and callable(getattr(contract, "name")):
                         try:
@@ -555,7 +556,7 @@ class Planner:
                                     name_found = True
                                 except Exception:
                                     pass
-                    
+
                     # If name() failed, fall back to contract_type.name
                     if not name_found and hasattr(contract, "contract_type") and contract.contract_type.name:
                         contract_name = contract.contract_type.name
@@ -573,7 +574,7 @@ class Planner:
                 "command_type": cmd.command_type.name,
                 "contract_name": contract_name,  # Add contract name if available
             }
-            
+
             # Add source tracking info for command inputs
             input_sources = []
             for arg in cmd.inputs:
@@ -583,19 +584,428 @@ class Planner:
                 else:
                     input_sources.append(-1)  # No known source
             command_dict["input_sources"] = input_sources
-                
+
             commands_for_renderer.append(command_dict)
-            
+
             # Handle both enum and int call types for backward compatibility
             if hasattr(cmd.call_type, "name"):
                 call_types.append(cmd.call_type.name)
             else:
                 # Convert int to enum
                 call_types.append(CallType(cmd.call_type).name)
-            
+
             # Track sources for output values
             if cmd.output and cmd.output.index != ArgType.USE_STATE:
                 source_tracking[cmd.output.index] = _i
 
         # Use the common renderer with enhanced tracking info
         return render_tree(commands_for_renderer, self.state, call_types, use_color=use_color)
+
+    def _repr_html_(self) -> str:
+        """
+        Generate an HTML representation of the execution plan for display in notebooks.
+
+        This method is automatically called by notebook environments like Jupyter and Marimo
+        when they need to display the object. It provides a rich HTML representation with
+        proper formatting and highlighting.
+
+        Returns:
+            str: An HTML string representation of the execution plan
+        """
+        if not self.commands:
+            return "<div class='weiroll-plan'><p><em>Empty plan (no commands)</em></p></div>"
+
+        # Convert commands to the format expected by the renderer
+        commands_for_renderer = []
+        call_types = []
+
+        # Track state value sources for better visualization
+        source_tracking = {}
+
+        # First pass - collect StateValue objects with source_command information
+        for i, value in enumerate(self.state):
+            if isinstance(value, StateValue) and hasattr(value, "source_command") and value.source_command >= 0:
+                source_tracking[i] = value.source_command
+
+        # Get data like in show_tree but format as HTML
+        for _i, cmd in enumerate(self.commands):
+            target_address = "0x" + cmd.target.hex()[-40:]
+            selector_hex = "0x" + cmd.function_selector.hex()
+
+            # Check if command has function_info from decoder
+            if hasattr(cmd, "function_info") and cmd.function_info:
+                fn_name = cmd.function_info.get("signature") or f"function({selector_hex})"
+            else:
+                # Try to extract the function name from the 4byte selector
+                fn_name = f"function({selector_hex})"  # Default if lookup fails
+
+                contract_name = ""
+                try:
+                    # Try to look up with Contract class from ape (if available)
+                    contract = ApeContract(target_address)
+
+                    # Try to get the signature from the contract's identifier_lookup
+                    if hasattr(contract, "identifier_lookup") and selector_hex in contract.identifier_lookup:
+                        fn_name = contract.identifier_lookup[selector_hex].signature
+
+                    # Try to get contract name
+                    name_found = False
+                    if hasattr(contract, "name") and callable(getattr(contract, "name")):
+                        try:
+                            contract_name = contract.name()
+                            name_found = True
+                        except Exception:
+                            if hasattr(contract, "symbol") and callable(getattr(contract, "symbol")):
+                                try:
+                                    contract_name = contract.symbol()
+                                    name_found = True
+                                except Exception:
+                                    pass
+
+                    if not name_found and hasattr(contract, "contract_type") and contract.contract_type.name:
+                        contract_name = contract.contract_type.name
+                except Exception:
+                    pass
+
+            # Format command for renderer with enhanced tracking info
+            command_dict = {
+                "to": target_address,
+                "function": fn_name,
+                "selector": selector_hex,
+                "inputs": [arg.index for arg in cmd.inputs],
+                "outputs": [cmd.output.index] if cmd.output and cmd.output.index != ArgType.USE_STATE else [],
+                "command_type": cmd.command_type.name,
+                "contract_name": contract_name,
+            }
+
+            # Add source tracking info for command inputs
+            input_sources = []
+            for arg in cmd.inputs:
+                if isinstance(arg.index, int) and arg.index in source_tracking:
+                    input_sources.append(source_tracking[arg.index])
+                else:
+                    input_sources.append(-1)
+            command_dict["input_sources"] = input_sources
+
+            commands_for_renderer.append(command_dict)
+
+            # Handle both enum and int call types for backward compatibility
+            if hasattr(cmd.call_type, "name"):
+                call_types.append(cmd.call_type.name)
+            else:
+                call_types.append(CallType(cmd.call_type).name)
+
+            # Track sources for output values
+            if cmd.output and cmd.output.index != ArgType.USE_STATE:
+                source_tracking[cmd.output.index] = _i
+
+        # Build dependency maps for reference relationships
+        state_sources = {}
+        state_usage = {}
+        for i, command in enumerate(commands_for_renderer):
+            # Track outputs (sources)
+            outputs = command.get("outputs", [])
+            for output_idx, state_idx in enumerate(outputs):
+                try:
+                    numeric_state_idx = int(state_idx)
+                    state_sources[numeric_state_idx] = (i, output_idx)
+                except (ValueError, TypeError):
+                    continue
+
+            # Track inputs (usage)
+            inputs = command.get("inputs", [])
+            for input_idx, input_val in enumerate(inputs):
+                try:
+                    numeric_input_val = int(input_val)
+                    if numeric_input_val not in state_usage:
+                        state_usage[numeric_input_val] = []
+                    state_usage[numeric_input_val].append((i, input_idx))
+                except (ValueError, TypeError):
+                    continue
+
+        # Use the HTML renderer module
+        return render_html(commands_for_renderer, self.state, call_types, state_sources, state_usage)
+        for i, command in enumerate(commands_for_renderer):
+            # Track outputs (sources)
+            outputs = command.get("outputs", [])
+            for output_idx, state_idx in enumerate(outputs):
+                try:
+                    numeric_state_idx = int(state_idx)
+                    state_sources[numeric_state_idx] = (i, output_idx)
+                except (ValueError, TypeError):
+                    continue
+
+            # Track inputs (usage)
+            inputs = command.get("inputs", [])
+            for input_idx, input_val in enumerate(inputs):
+                try:
+                    numeric_input_val = int(input_val)
+                    if numeric_input_val not in state_usage:
+                        state_usage[numeric_input_val] = []
+                    state_usage[numeric_input_val].append((i, input_idx))
+                except (ValueError, TypeError):
+                    continue
+
+        # Format each command
+        for i, command in enumerate(commands_for_renderer):
+            call_type = call_types[i] if i < len(call_types) else "CALL"
+
+            # Format command header
+            target = command.get("to", "0x0000000000000000000000000000000000000000")
+            function = command.get("function", f"function({command.get('selector', '0x00000000')})")
+            contract_name = command.get("contract_name", "")
+
+            # Color class based on call type
+            call_type_class = f"command-{call_type.lower()}"
+
+            # Command header - combining contract, function, and call type in one block
+            header_line = f"<div class='command-header'>Command {i}: "
+
+            # Contract name and address
+            if contract_name:
+                header_line += (
+                    f"<span class='function-name'>{contract_name}</span> @ <span class='address'>{target}</span>"
+                )
+            else:
+                header_line += f"<span class='address'>{target}</span>"
+
+            html.append(header_line + "</div>")
+
+            # Function signature and call type
+            function_line = f"<div class='{call_type_class}'>  <span class='function-name'>{function}</span> <span class='command-type'>["
+
+            # Handle command type
+            command_type = command.get("command_type", "CALL")
+            if command_type != "CALL":
+                function_line += f"{call_type}, {command_type}]"
+            else:
+                function_line += f"{call_type}]"
+
+            html.append(function_line + "</span></div>")
+
+            # Process inputs
+            inputs = command.get("inputs", [])
+            outputs = command.get("outputs", [])
+
+            # Format inputs
+            for j, input_val in enumerate(inputs):
+                is_last_input = j == len(inputs) - 1
+                has_output = bool(outputs)
+
+                # Determine branch character
+                branch_char = "└─" if is_last_input and not has_output else "├─"
+
+                # Try to get parameter info
+                param_type = ""
+                param_name = ""
+
+                if "function" in command:
+                    function_sig = command.get("function", "")
+                    if "(" in function_sig and ")" in function_sig:
+                        params_section = function_sig.split("(")[1].split(")")[0]
+                        params = params_section.split(",")
+                        if j < len(params):
+                            param = params[j].strip()
+                            if " " in param:
+                                param_parts = param.split(" ", 1)
+                                param_type = param_parts[0]
+                                param_name = param_parts[1] if len(param_parts) > 1 else ""
+                            else:
+                                param_type = param
+
+                # Create input label
+                if param_type and param_name:
+                    input_label = f"{param_type} {param_name}:"
+                elif param_type:
+                    input_label = f"{param_type}:"
+                else:
+                    input_label = f"Input {j}:"
+
+                # Get the source command
+                source_cmd = -1
+                if "input_sources" in command and j < len(command["input_sources"]):
+                    source_cmd = command["input_sources"][j]
+
+                if isinstance(input_val, int) or (isinstance(input_val, str) and input_val.isdigit()):
+                    # Convert to int
+                    try:
+                        numeric_val = int(input_val)
+                    except (ValueError, TypeError):
+                        numeric_val = input_val
+
+                    # Special handling for negative indices
+                    if isinstance(numeric_val, int) and numeric_val < 0:
+                        if "command_type" in command and command["command_type"] == "SUBPLAN":
+                            if numeric_val == -1:
+                                html.append(
+                                    f"<div data-command-idx='{i}'>  <span class='tree-branch'>{branch_char}</span> <span class='input-label'>{input_label}</span> <span class='subplan'>&lt;Subplan&gt;</span></div>"
+                                )
+                            else:
+                                html.append(
+                                    f"<div data-command-idx='{i}'>  <span class='tree-branch'>{branch_char}</span> <span class='input-label'>{input_label}</span> <span class='subplan'>&lt;Special Value: {numeric_val}&gt;</span></div>"
+                                )
+                        else:
+                            html.append(
+                                f"<div data-command-idx='{i}'>  <span class='tree-branch'>{branch_char}</span> <span class='input-label'>{input_label}</span> <span class='state-ref'>&lt;Special Value: {numeric_val}&gt;</span></div>"
+                            )
+
+                    # Regular state reference
+                    elif isinstance(numeric_val, int):
+                        # Use the state-specific color class and add data attribute for interactivity
+                        state_color_class = f"state-{numeric_val % 20}"
+                        state_ref = f"<span class='{state_color_class}' data-state-ref='{numeric_val}'>State[{numeric_val}]</span>"
+
+                        if source_cmd >= 0:
+                            # Show source command
+                            cmd_ref = f"<span class='function-name'>Command {source_cmd}</span>"
+                            html.append(
+                                f"<div data-command-idx='{i}' data-state-used='{numeric_val}'>  <span class='tree-branch'>{branch_char}</span> <span class='input-label'>{input_label}</span> {state_ref} (from {cmd_ref} output)</div>"
+                            )
+                        elif numeric_val < len(self.state):
+                            # It's an initial state value
+                            from .utils.formatters import format_value
+
+                            value_formatted = format_value(self.state[numeric_val])
+
+                            # Format value based on type
+                            value_class = "value-string"
+                            if isinstance(self.state[numeric_val], str):
+                                if self.state[numeric_val].startswith("0x"):
+                                    if len(self.state[numeric_val]) == 42:  # Ethereum address
+                                        value_class = "value-address"
+                                    else:
+                                        value_class = "value-bytes"
+                                else:
+                                    value_class = "value-string"
+                            elif isinstance(self.state[numeric_val], (int, float)):
+                                value_class = "value-number"
+                            elif isinstance(self.state[numeric_val], bool):
+                                value_class = "value-bool"
+
+                            html.append(
+                                f"<div data-command-idx='{i}' data-state-used='{numeric_val}'>  <span class='tree-branch'>{branch_char}</span> <span class='input-label'>{input_label}</span> {state_ref} = <span class='{value_class}'>{value_formatted}</span></div>"
+                            )
+                        else:
+                            # Reference to a state that will be computed
+                            html.append(
+                                f"<div data-command-idx='{i}' data-state-used='{numeric_val}'>  <span class='tree-branch'>{branch_char}</span> <span class='input-label'>{input_label}</span> {state_ref}</div>"
+                            )
+                else:
+                    # Handle non-integer inputs
+                    from .utils.formatters import format_value
+
+                    value_text = format_value(input_val)
+                    html.append(
+                        f"<div data-command-idx='{i}'>  <span class='tree-branch'>{branch_char}</span> <span class='input-label'>{input_label}</span> <span class='value-string'>{value_text}</span></div>"
+                    )
+
+            # Format outputs
+            if outputs:
+                for output_val in outputs:
+                    # Create a numeric value for the output
+                    numeric_output_val = output_val
+                    try:
+                        numeric_output_val = int(numeric_output_val)
+                    except (ValueError, TypeError):
+                        numeric_output_val = output_val
+
+                    # Extract output type if available
+                    output_type = ""
+                    if "function" in commands_for_renderer[i]:
+                        function_sig = commands_for_renderer[i].get("function", "")
+                        if "->" in function_sig:
+                            return_part = function_sig.split("->")[1].strip()
+                            if "," in return_part:
+                                return_part = return_part.split(",")[0].strip()
+                            output_type = return_part
+
+                    # Format output label
+                    if output_type:
+                        output_label = f"{output_type} output:"
+                    else:
+                        output_label = "Output:"
+
+                    # Use the state-specific color class and add data attribute for interactivity
+                    color_idx = numeric_output_val % 20 if isinstance(numeric_output_val, int) else 0
+                    state_ref = (
+                        f"<span class='state-{color_idx}' data-state-ref='{numeric_output_val}' "
+                        + f"onmouseover='highlightState({numeric_output_val})' "
+                        + f"onmouseout='clearHighlight()'>State[{numeric_output_val}]</span>"
+                    )
+
+                    # Find if output is used by later commands
+                    usage_details = []
+                    if numeric_output_val in state_usage:
+                        for cmd_idx, input_idx in state_usage[numeric_output_val]:
+                            if cmd_idx > i:  # Only consider future commands
+                                cmd = commands_for_renderer[cmd_idx]
+                                function_name = cmd.get("function", "")
+                                if "(" in function_name:
+                                    function_name = function_name.split("(")[0]
+
+                                # Try to get parameter name
+                                param_name = f"param{input_idx}"
+                                param_full = f"param{input_idx}"
+
+                                function_sig = cmd.get("function", "")
+                                if "(" in function_sig and ")" in function_sig:
+                                    params_section = function_sig.split("(")[1].split(")")[0]
+                                    params = params_section.split(",")
+                                    if input_idx < len(params):
+                                        param = params[input_idx].strip()
+                                        param_full = param
+                                        if " " in param:
+                                            param_name = (
+                                                param.split(" ")[1]
+                                                if len(param.split(" ")) > 1
+                                                else param.split(" ")[0]
+                                            )
+
+                                usage_details.append((cmd_idx, function_name, param_name, param_full))
+
+                    # Format the output line
+                    if usage_details:
+                        if len(usage_details) == 1:
+                            cmd_idx, fn_name, param_name, param_full = usage_details[0]
+
+                            if fn_name and param_name:
+                                cmd_ref = f"<span class='function-name'>Command {cmd_idx}</span>"
+                                param_ref = f"<span class='param-name'>{fn_name} {param_full}</span>"
+                                html.append(
+                                    f"<div data-command-idx='{i}' data-state-source='{numeric_output_val}'>  <span class='tree-branch'>└─</span> <span class='output-label'>{output_label}</span> {state_ref} <span class='arrow'>→</span> {cmd_ref} ({param_ref})</div>"
+                                )
+                            else:
+                                cmd_ref = f"<span class='function-name'>Command {cmd_idx}</span>"
+                                html.append(
+                                    f"<div data-command-idx='{i}' data-state-source='{numeric_output_val}'>  <span class='tree-branch'>└─</span> <span class='output-label'>{output_label}</span> {state_ref} <span class='arrow'>→</span> {cmd_ref}</div>"
+                                )
+                        else:
+                            # Multiple usages
+                            usage_strs = []
+                            for cmd_idx, fn_name, param_name, param_full in usage_details:
+                                if fn_name and param_name:
+                                    cmd_ref = f"<span class='function-name'>Command {cmd_idx}</span>"
+                                    param_ref = f"<span class='param-name'>{fn_name} {param_full}</span>"
+                                    usage_strs.append(f"{cmd_ref} ({param_ref})")
+                                else:
+                                    cmd_ref = f"<span class='function-name'>Command {cmd_idx}</span>"
+                                    usage_strs.append(f"{cmd_ref}")
+
+                            html.append(
+                                f"<div data-command-idx='{i}' data-state-source='{numeric_output_val}'>  <span class='tree-branch'>└─</span> <span class='output-label'>{output_label}</span> {state_ref} <span class='arrow'>→</span> "
+                                + ", ".join(usage_strs)
+                                + "</div>"
+                            )
+                    else:
+                        html.append(
+                            f"<div data-command-idx='{i}' data-state-source='{numeric_output_val}'>  <span class='tree-branch'>└─</span> <span class='output-label'>{output_label}</span> {state_ref} <span class='unused'>(unused in future commands)</span></div>"
+                        )
+
+            # Add spacing between commands
+            if i < len(commands_for_renderer) - 1:
+                html.append("<div style='height: 10px;'></div>")
+
+        # Close container div
+        html.append("</div>")
+
+        return "\n".join(html)

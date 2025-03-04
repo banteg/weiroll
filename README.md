@@ -8,7 +8,7 @@ The Python SDK provides a simple and efficient way to create operation chains, b
 
 - **Contract Integration**: Seamless integration with Ape contracts
 - **Command Execution**: Create and execute sequences of contract calls
-- **Plan Visualization**: Display plans as dependency trees with detailed formatting
+- **Plan Visualization**: Display plans as dependency trees with detailed formatting and HTML rendering for notebooks
 - **Plan Decoding**: Decode encoded plans with enhanced visualization
 - **Plan Reconstruction**: Recreate Planner objects from decoded plans
 - **Value Formatting**: Format large numbers and token amounts for readability
@@ -157,6 +157,27 @@ planner.add(contract.setArray([1, 2, 3]))
 path = [str(token1.address), str(token2.address), str(token3.address)]
 planner.add(router.swapExactTokensForTokens(amount, 0, path, recipient, deadline))
 ```
+
+### Notebook Integration
+
+Weiroll supports rich visualization in notebook environments like Jupyter and Marimo:
+
+```python
+# In a notebook, simply display the planner object
+planner  # Will automatically use HTML rendering via _repr_html_
+
+# Decoded plans also support rich display
+from weiroll import Decoder
+plan = planner.plan()
+decoded_plan = Decoder.decode_plan(plan["commands"], plan["state"])
+decoded_plan  # Will display with HTML formatting
+
+# For Marimo users
+import marimo as mo
+mo.ui.text(planner)  # Display the plan with rich formatting
+```
+
+The HTML rendering shows the same information as the terminal output but with proper syntax highlighting and improved readability in notebook environments.
 
 ## Integration with EVM Frameworks
 
