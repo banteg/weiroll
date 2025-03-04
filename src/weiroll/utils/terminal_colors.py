@@ -72,7 +72,7 @@ TREE_COLORS = {
     "subplan": COLORS["BRIGHT_MAGENTA"],
     
     "input_label": COLORS["BRIGHT_WHITE"],
-    "output_label": COLORS["BRIGHT_WHITE"],
+    "output_label": COLORS["BRIGHT_YELLOW"],
     
     "value_string": COLORS["GREEN"],
     "value_number": COLORS["BRIGHT_YELLOW"],

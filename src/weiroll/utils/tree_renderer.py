@@ -357,10 +357,29 @@ def format_output_line(
     prefix_char = TREE_CHARS["last"]
     prefix = colorize(prefix_char, "tree_structure")
 
-    # Colorize the output label with proper alignment
-    output_label_text = "Output:"
-    if output_type:
-        output_label_text = f"Output ({output_type}):"
+    # Parse the output type from command info if available
+    output_type_name = ""
+    if not output_type and "function" in commands[command_index]:
+        # Try to extract return type from function signature
+        function_sig = commands[command_index].get("function", "")
+        if "->" in function_sig:
+            # Extract return type after the arrow: "function(params) -> uint256" => "uint256"
+            return_part = function_sig.split("->")[1].strip()
+            # Handle multiple return values
+            if "," in return_part:
+                return_part = return_part.split(",")[0].strip()
+            output_type_name = return_part
+        elif output_type:
+            output_type_name = output_type
+    else:
+        output_type_name = output_type if output_type else ""
+            
+    # Format output label with type similar to input parameters
+    if output_type_name:
+        output_label_text = f"{output_type_name} output:"
+    else:
+        output_label_text = "Output:"
+        
     # Pad to 18 spaces to match the input labels
     output_label = colorize(output_label_text.ljust(18), "output_label")
     
