@@ -124,14 +124,15 @@ def format_command_header(command: Dict[str, Any], index: int, call_type: str) -
         # Show both name and address
         colored_name = colorize(contract_name, "function_name")
         colored_address = colorize(target_formatted, "address")
-        contract_line = f"\n{contract_indent}{colored_name} @ {colored_address}"
+        contract_line = f"{colored_name} @ {colored_address}"
     else:
         # Just show address on its own line
         colored_address = colorize(target_formatted, "address")
-        contract_line = f"\n{contract_indent}@ {colored_address}"
+        contract_line = f"@ {colored_address}"
     
-    # Return a multi-line header with function on first line, contract info on second
-    return f"{colored_command_index}: {colored_function} {colored_type}{contract_line}"
+    # Return a multi-line header with contract info on first line, function on second
+    # Note: Swapped order - contract first, then function
+    return f"{colored_command_index}: {contract_line}\n{contract_indent}{contract_indent}{colored_function} {colored_type}"
 
 
 def format_input_line(
@@ -163,8 +164,33 @@ def format_input_line(
     # Colorize the tree structure
     prefix = colorize(prefix_char, "tree_structure")
 
-    # Colorize the input label with proper alignment (padding to 10 spaces)
-    input_label = colorize(f"Input {input_index}:".ljust(10), "input_label")
+    # Try to get parameter information from function signature if available
+    param_type = ""
+    param_name = ""
+    
+    if "function" in command:
+        function_sig = command.get("function", "")
+        if "(" in function_sig and ")" in function_sig:
+            # Extract params section from signature: func(type1 name1, type2 name2) -> param section is "type1 name1, type2 name2"
+            params_section = function_sig.split("(")[1].split(")")[0]
+            params = params_section.split(",")
+            if input_index < len(params):
+                param = params[input_index].strip()
+                if " " in param:
+                    # Split "address holder" into "address" and "holder"
+                    param_parts = param.split(" ", 1)
+                    param_type = param_parts[0]
+                    param_name = param_parts[1] if len(param_parts) > 1 else ""
+                else:
+                    param_type = param
+    
+    # Create input label with parameter type and name instead of "Input X:"
+    if param_type and param_name:
+        input_label = colorize(f"{param_type} {param_name}:".ljust(18), "input_label")
+    elif param_type:
+        input_label = colorize(f"{param_type}:".ljust(18), "input_label")
+    else:
+        input_label = colorize(f"Input {input_index}:".ljust(18), "input_label")
 
     # Get the source command from enhanced tracking, if available
     source_cmd = -1
@@ -217,7 +243,7 @@ def format_input_line(
             if source_cmd >= 0:
                 # Show both source command and parameter role if available
                 cmd_ref = colorize(f"Command {source_cmd}", "function_name")
-                return f"{prefix} {input_label} {state_ref} (from {cmd_ref} output)"
+                return f"{prefix} {input_label}{state_ref} (from {cmd_ref} output)"
             elif numeric_val < len(state):
                 # It's an initial state value
                 value_formatted = format_value(state[numeric_val])
@@ -235,10 +261,10 @@ def format_input_line(
                 elif isinstance(state[numeric_val], bool):
                     value_formatted = colorize(value_formatted, "value_bool")
                 
-                return f"{prefix} {input_label} {state_ref} = {value_formatted}"
+                return f"{prefix} {input_label}{state_ref} = {value_formatted}"
             else:
                 # Reference to a state that will be computed during execution
-                return f"{prefix} {input_label} {state_ref}"
+                return f"{prefix} {input_label}{state_ref}"
 
     # Handle non-integer inputs (should be rare in the planner, more common in decoded plans)
     value_text = colorize(format_value(input_val), "value_string")
@@ -335,8 +361,8 @@ def format_output_line(
     output_label_text = "Output:"
     if output_type:
         output_label_text = f"Output ({output_type}):"
-    # Pad to 10 spaces for consistent alignment
-    output_label = colorize(output_label_text.ljust(10), "output_label")
+    # Pad to 18 spaces to match the input labels
+    output_label = colorize(output_label_text.ljust(18), "output_label")
     
     # Colorize state reference with state-based coloring
     state_ref = colorize_state_ref(f"State[{numeric_output_val}]", numeric_output_val)
@@ -351,11 +377,11 @@ def format_output_line(
                 # Use full parameter with type
                 param_ref = colorize(f"{fn_name} {param_full}", "param_name")
                 arrow = colorize("→", "tree_structure")
-                return f"{prefix} {output_label} {state_ref} {arrow} {cmd_ref} ({param_ref})"
+                return f"{prefix} {output_label}{state_ref} {arrow} {cmd_ref} ({param_ref})"
             else:
                 cmd_ref = colorize(f"Command {cmd_idx}", "function_name")
                 arrow = colorize("→", "tree_structure")
-                return f"{prefix} {output_label} {state_ref} {arrow} {cmd_ref}"
+                return f"{prefix} {output_label}{state_ref} {arrow} {cmd_ref}"
         else:
             # Multiple usages
             usage_strs = []
@@ -370,10 +396,10 @@ def format_output_line(
                     usage_strs.append(f"{cmd_ref}")
                     
             arrow = colorize("→", "tree_structure")
-            return f"{prefix} {output_label} {state_ref} {arrow} " + ", ".join(usage_strs)
+            return f"{prefix} {output_label}{state_ref} {arrow} " + ", ".join(usage_strs)
     else:
         unused_msg = colorize("(unused in future commands)", "unused")
-        return f"{prefix} {output_label} {state_ref} {unused_msg}"
+        return f"{prefix} {output_label}{state_ref} {unused_msg}"
 
 
 def render_tree(
