@@ -284,8 +284,11 @@ def render_html(
   }
 }
 
-.weiroll-plan { font-family: monospace; white-space: pre; line-height: 1.2; color: var(--weiroll-text); background: var(--weiroll-bg); padding: 10px; border-radius: 4px; }
+.weiroll-plan { font-family: monospace; line-height: 1.2; color: var(--weiroll-text); background: var(--weiroll-bg); padding: 10px; border-radius: 4px; }
 .weiroll-plan div { margin: 0; padding: 0; }
+.weiroll-plan .command-row { display: flex; flex-wrap: wrap; align-items: baseline; padding: 2px 0; }
+.weiroll-plan .tree-branch { display: inline-block; width: 24px; text-align: right; margin-right: 4px; }
+.weiroll-plan .command-separator { height: 10px; }
 .weiroll-plan .command-header { font-weight: bold; color: var(--weiroll-command-header); margin-top: 10px; }
 .weiroll-plan .command-call { color: var(--weiroll-command-call); }
 .weiroll-plan .command-staticcall { color: var(--weiroll-command-staticcall); }
@@ -371,19 +374,16 @@ function clearHighlight() {
     {% endif %}
   </div>
   
-  <div class='{{ cmd.call_type_class }}'>  <span class='function-name'>{{ cmd.function }}</span> <span class='command-type'>[
-    {% if cmd.command_type != "CALL" %}
-    {{ cmd.call_type }}, {{ cmd.command_type }}]
-    {% else %}
-    {{ cmd.call_type }}]
-    {% endif %}
-  </span></div>
+  <div class='{{ cmd.call_type_class }}'>
+    <span class='function-name'>{{ cmd.function }}</span> 
+    <span class='command-type'>[{% if cmd.command_type != "CALL" %}{{ cmd.call_type }}, {{ cmd.command_type }}]{% else %}{{ cmd.call_type }}]{% endif %}</span>
+  </div>
   
   {# Process inputs #}
   {% for input in cmd.inputs %}
-    <div data-command-idx='{{ cmd.index }}'{% if input.is_state_ref and input.numeric_val is defined %} data-state-used='{{ input.numeric_val }}'{% endif %}>
-      <span class='tree-branch'>{{ input.branch_char }}</span> 
-      <span class='input-label'>{{ input.input_label }}:</span> 
+    <div class="command-row" data-command-idx='{{ cmd.index }}'{% if input.is_state_ref and input.numeric_val is defined %} data-state-used='{{ input.numeric_val }}'{% endif %}>
+      <span class='tree-branch'>{{ input.branch_char }}</span>
+      <span class='input-label'>{{ input.input_label }}:</span>
       
       {% if input.is_state_ref is defined and input.is_state_ref %}
         {# State reference #}
@@ -392,9 +392,9 @@ function clearHighlight() {
               onmouseout='clearHighlight()'>State[{{ input.numeric_val }}]</span>
         
         {% if input.has_source is defined and input.has_source %}
-          (from <span class='function-name'>Command {{ input.source_cmd }}</span> output)
+          <span>(from <span class='function-name'>Command {{ input.source_cmd }}</span> output)</span>
         {% elif input.is_initial_state is defined and input.is_initial_state %}
-          = <span class='{{ input.value_class }}'>{{ input.value_formatted }}</span>
+          <span>= <span class='{{ input.value_class }}'>{{ input.value_formatted }}</span></span>
         {% endif %}
         
       {% elif input.is_special_value is defined and input.is_special_value %}
@@ -418,28 +418,28 @@ function clearHighlight() {
   
   {# Process outputs #}
   {% for output in cmd.outputs %}
-    <div data-command-idx='{{ cmd.index }}' data-state-source='{{ output.numeric_val }}'>
-      <span class='tree-branch'>└─</span> 
-      <span class='output-label'>{{ output.output_label }}:</span> 
+    <div class="command-row" data-command-idx='{{ cmd.index }}' data-state-source='{{ output.numeric_val }}'>
+      <span class='tree-branch'>└─</span>
+      <span class='output-label'>{{ output.output_label }}:</span>
       
       <span class='state-{{ output.color_idx }}' data-state-ref='{{ output.numeric_val }}' 
             onmouseover='highlightState({{ output.numeric_val }})' 
             onmouseout='clearHighlight()'>State[{{ output.numeric_val }}]</span>
       
       {% if output.usage_details %}
-        <span class='arrow'>→</span> 
+        <span class='arrow'>→</span>
         {% if output.usage_details|length == 1 %}
           {% set usage = output.usage_details[0] %}
-          <span class='function-name'>Command {{ usage.cmd_idx }}</span> 
+          <span class='function-name'>Command {{ usage.cmd_idx }}</span>
           {% if usage.fn_name and usage.param_name %}
-          (<span class='param-name' data-state-arg='{{ output.numeric_val }}'>{{ usage.fn_name }} {{ usage.param_full }}</span>)
+          <span>(<span class='param-name' data-state-arg='{{ output.numeric_val }}'>{{ usage.fn_name }} {{ usage.param_full }}</span>)</span>
           {% endif %}
         {% else %}
           {% for usage in output.usage_details %}
-            {% if not loop.first %}, {% endif %}
+            {% if not loop.first %}<span>, </span>{% endif %}
             <span class='function-name'>Command {{ usage.cmd_idx }}</span>
             {% if usage.fn_name and usage.param_name %}
-            (<span class='param-name' data-state-arg='{{ output.numeric_val }}'>{{ usage.fn_name }} {{ usage.param_full }}</span>)
+            <span>(<span class='param-name' data-state-arg='{{ output.numeric_val }}'>{{ usage.fn_name }} {{ usage.param_full }}</span>)</span>
             {% endif %}
           {% endfor %}
         {% endif %}
@@ -450,7 +450,7 @@ function clearHighlight() {
   {% endfor %}
   
   {% if not loop.last %}
-  <div style='height: 10px;'></div>
+  <div class="command-separator"></div>
   {% endif %}
 {% endfor %}
 </div>
