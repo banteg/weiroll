@@ -284,10 +284,36 @@ def render_html(
   }
 }
 
-.weiroll-plan { font-family: monospace; line-height: 1.2; color: var(--weiroll-text); background: var(--weiroll-bg); padding: 10px; border-radius: 4px; }
+.weiroll-plan { font-family: monospace; line-height: 1.4; color: var(--weiroll-text); background: var(--weiroll-bg); padding: 10px; border-radius: 4px; }
 .weiroll-plan div { margin: 0; padding: 0; }
 .weiroll-plan .command-row { display: flex; flex-wrap: wrap; align-items: baseline; padding: 2px 0; }
-.weiroll-plan .tree-branch { display: inline-block; width: 24px; text-align: right; margin-right: 4px; }
+.weiroll-plan .command-inputs-container, .weiroll-plan .command-outputs-container { position: relative; }
+.weiroll-plan .command-inputs-container::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 10px;
+  width: 1px;
+  background-color: var(--weiroll-tree-branch);
+}
+.weiroll-plan .tree-branch { position: relative; width: 24px; margin-right: 8px; flex-shrink: 0; }
+.weiroll-plan .tree-branch::before { 
+  content: ""; 
+  position: absolute; 
+  top: 0.6em; 
+  left: 10px; 
+  display: block; 
+  width: 14px; 
+  height: 1px; 
+  background-color: var(--weiroll-tree-branch); 
+}
+.weiroll-plan .tree-branch-mid::after { 
+  content: none; /* The vertical line is drawn by the container */
+}
+.weiroll-plan .tree-branch-last::after { 
+  content: none; /* The vertical line is drawn by the container */
+}
 .weiroll-plan .command-separator { height: 10px; }
 .weiroll-plan .command-header { font-weight: bold; color: var(--weiroll-command-header); margin-top: 10px; }
 .weiroll-plan .command-call { color: var(--weiroll-command-call); }
@@ -380,9 +406,10 @@ function clearHighlight() {
   </div>
   
   {# Process inputs #}
+  <div class="command-inputs-container">
   {% for input in cmd.inputs %}
     <div class="command-row" data-command-idx='{{ cmd.index }}'{% if input.is_state_ref and input.numeric_val is defined %} data-state-used='{{ input.numeric_val }}'{% endif %}>
-      <span class='tree-branch'>{{ input.branch_char }}</span>
+      <span class='tree-branch {% if input.is_last and not cmd.outputs %}tree-branch-last{% else %}tree-branch-mid{% endif %}'></span>
       <span class='input-label'>{{ input.input_label }}:</span>
       
       {% if input.is_state_ref is defined and input.is_state_ref %}
@@ -415,11 +442,14 @@ function clearHighlight() {
       {% endif %}
     </div>
   {% endfor %}
+  </div>
   
   {# Process outputs #}
+  {% if cmd.outputs %}
+  <div class="command-outputs-container">
   {% for output in cmd.outputs %}
     <div class="command-row" data-command-idx='{{ cmd.index }}' data-state-source='{{ output.numeric_val }}'>
-      <span class='tree-branch'>└─</span>
+      <span class='tree-branch tree-branch-last'></span>
       <span class='output-label'>{{ output.output_label }}:</span>
       
       <span class='state-{{ output.color_idx }}' data-state-ref='{{ output.numeric_val }}' 
@@ -448,6 +478,8 @@ function clearHighlight() {
       {% endif %}
     </div>
   {% endfor %}
+  </div>
+  {% endif %}
   
   {% if not loop.last %}
   <div class="command-separator"></div>
