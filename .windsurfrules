@@ -1,0 +1,13 @@
+we work on a python sdk in `src/weiroll/`
+
+always use snake_case for method names
+test: `uv run pytest tests/`
+lint: `ruff check --fix --unsafe-fixes`
+install packages: `uv add`
+use conventional commits
+
+if you get an error "ape.exceptions.ProviderNotConnectedError: Not connected to a network provider.", it means you need to connect like this:
+
+from ape import networks
+with networks.parse_network_choice('ethereum:mainnet:http://127.0.0.1:8545'):
+    # your code
